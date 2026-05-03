@@ -7,7 +7,7 @@
 using namespace std;
 
 // Tipos de condición (para identificar en el intérprete)
-enum class CondType {
+enum class CondType { // con enum luego se puede tratar como comparación el tipo para saber si cumple
     AND,   // Cond AND Cond
     CMP,   // id > value  |  id < value  |  id = value
     FACT   // id  (verdadero si el hecho está activo)
@@ -17,7 +17,7 @@ enum class CondType {
 // Todos los tipos de condición heredan de este
 struct CondNode {
     CondType type;
-    virtual ~CondNode() {}
+    virtual ~CondNode() {} // destructor virtual para liberar en memoria
 };
  
 // Nodo AND: representa "condición izquierda AND condición derecha"

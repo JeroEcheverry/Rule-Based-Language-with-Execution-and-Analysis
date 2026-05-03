@@ -3,8 +3,7 @@
 #include <stdexcept>
 
 // tokenize()
-// Recorre el texto crudo carácter por carácter
-// y agrupa los caracteres en tokens
+// Recorre el texto crudo carácter por carácter y agrupa los caracteres en tokens
 
 vector<Token> tokenize(string input) {
     vector<Token> tokens; // lista de tokens que vamos construyendo
@@ -12,13 +11,13 @@ vector<Token> tokenize(string input) {
  
     while (i < input.size()) {
  
-        // ── Ignorar espacios, saltos de línea y tabulaciones ──
+        // Ignora espacios, saltos de línea y tabulaciones
         if (isspace(input[i])) {
             i++;
             continue;
         }
  
-        // ── Letra: puede ser keyword o identificador ──
+        // Letra: puede ser keyword o identificador
         if (isalpha(input[i])) {
             string word = "";
  
@@ -34,20 +33,19 @@ vector<Token> tokenize(string input) {
             else if (word == "then") tokens.push_back({TokenType::THEN,  word});
             else if (word == "AND")  tokens.push_back({TokenType::AND,   word});
             else if (word == "State") {
-                // "State" va seguido de ":" → lo tratamos como un token especial
-                // que marca el inicio del estado inicial
+                // "State" va seguido de ":",es un token especial, que marca el inicio del estado inicial
                 while (i < input.size() && input[i] == ':') i++; // consumir el ":"
                 tokens.push_back({TokenType::STATE, "State"});
             }
             else {
-                // no es keyword → es un identificador (variable, hecho, nombre de regla)
+                // no es keyword, es un identificador (variable, hecho, nombre de regla)
                 tokens.push_back({TokenType::ID, word});
             }
  
             continue;
         }
  
-        // ── Dígito: es un número entero ──
+        // Dígito: es un número entero
         if (isdigit(input[i])) {
             string num = "";
  
@@ -61,13 +59,13 @@ vector<Token> tokenize(string input) {
             continue;
         }
  
-        // ── Símbolos de un solo carácter ──
+        // Símbolos de un solo carácter
         if (input[i] == ':') { tokens.push_back({TokenType::COLON, ":"}); i++; continue; }
         if (input[i] == '>') { tokens.push_back({TokenType::GT,    ">"}); i++; continue; }
         if (input[i] == '<') { tokens.push_back({TokenType::LT,    "<"}); i++; continue; }
         if (input[i] == '=') { tokens.push_back({TokenType::EQ,    "="}); i++; continue; }
  
-        // ── Carácter desconocido → error léxico ──
+        // Carácter desconocido (error de escritura del usuario)
         throw runtime_error("Caracter no reconocido: " + string(1, input[i]));
     }
  

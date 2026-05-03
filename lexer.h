@@ -23,26 +23,16 @@ enum class TokenType {
     // Datos
     ID,     // identificador: temp, alert, fan_on, r1...
     NUMBER, // número entero: 30, 35, 20...
- 
-    // Fin de archivo
-    END     // indica que no hay más tokens
+    END     // Fin de archivo: indica que no hay más tokens
 };
 
-// ESTRUCTURA DE UN TOKEN
-// Cada token tiene un tipo y un valor
-// Ejemplo: token de "temp" → {ID, "temp"}
-//          token de "30"   → {NUMBER, "30"}
-//          token de ">"    → {GT, ">"}
 
+// Cada token tiene un tipo y un valor (token de "temp" → {ID, "temp"})
 struct Token {
     TokenType type;
     string value;
 };
 
-// FUNCIÓN PRINCIPAL DEL LEXER
-// Recibe el texto crudo completo
-// Devuelve la lista de tokens
-
-vector<Token> tokenize(string input);
+vector<Token> tokenize(string input); //Recibe el texto crudo completo y devuelve la lista de tokens
  
 #endif

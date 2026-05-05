@@ -34,6 +34,7 @@ bool evalCond(CondNode* node, map<string, int>& variables, set<string>& facts) {
 set<string> interpret(ProgramNode* program, map<string, int> variables, set<string> facts) {
     set<string> activatedFacts = facts; // hechos iniciales que da el usuario
     bool changed = true; // repetir hasta que no hayan cambios
+    set<string> newFacts; // hechos nuevos, que son los que activa el programa
 
     while (changed) {
         changed = false; // asumimos que no hay cambios
@@ -41,16 +42,17 @@ set<string> interpret(ProgramNode* program, map<string, int> variables, set<stri
             bool condResult = evalCond( // evalua si la regla es verdadera segun los hechos actuales
                 rule->condition,
                 variables,
-                activatedFacts  // usamos los hechos actuales
+                activatedFacts  // evaluamos con todos los hechos
             );
             if (condResult) {
                 string newFact = rule->action;
                 if (activatedFacts.count(newFact) == 0) { // revisa si el hecho ya esta activo
                     activatedFacts.insert(newFact); // si no esta activo (=0) lo inserta
+                    newFacts.insert(newFact); // para el output
                     changed = true; // hubo cambio, debe repetir el loop
                 }
             }
         }
     }
-    return activatedFacts;
+    return newFacts; // solo se devuelven los hechos nuevos y no los iniciales
 }

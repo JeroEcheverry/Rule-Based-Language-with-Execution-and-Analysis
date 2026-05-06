@@ -33,7 +33,7 @@ vector<Token> tokenize(string input) {
             else if (word == "then") tokens.push_back({TokenType::THEN,  word});
             else if (word == "AND")  tokens.push_back({TokenType::AND,   word});
             else if (word == "State" || word == "state") {
-                // "State" va seguido de ":",es un token especial, que marca el inicio del estado inicial
+            // "State" va seguido de ":",es un token especial, que marca el inicio del estado inicial
                 while (i < input.size() && input[i] == ':') i++; // consumir el ":"
                 tokens.push_back({TokenType::STATE, "State"});
             }

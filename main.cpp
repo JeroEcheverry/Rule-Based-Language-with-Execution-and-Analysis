@@ -5,20 +5,11 @@
 #include "parser.h"
 #include "interpreter.h"
 #include "Analyzer.h"
+#include "Grammar.h"
 
 using namespace std;
 
-// ─────────────────────────────────────────────────────────────────
-// OPCIÓN 3 DEL MENÚ: Transformación de gramática
-// Muestra paso a paso:
-//   1. La gramática original del PDF
-//   2. La eliminación de recursión izquierda
-//   3. La factorización por izquierda
-//   4. Los conjuntos FIRST y FOLLOW
-//   5. La tabla de parsing predictivo
-// ─────────────────────────────────────────────────────────────────
-
-void showGrammarTransformation() {
+void showGrammarTransformation() { // Muestra la transformación de la Gramática del Proyecto
     cout << endl;
     cout << "========================================" << endl;
     cout << "  GRAMMAR TRANSFORMATION" << endl;
@@ -26,10 +17,10 @@ void showGrammarTransformation() {
 
     // ── 1. Gramática original ──
     cout << endl;
-    cout << "1. ORIGINAL GRAMMAR (from project spec)" << endl;
+    cout << "1. ORIGINAL GRAMMAR (from project)" << endl;
     cout << "----------------------------------------" << endl;
     cout << "  Program  -> RuleList" << endl;
-    cout << "  RuleList -> Rule RuleList | epsilon" << endl;
+    cout << "  RuleList -> Rule RuleList | ε" << endl;
     cout << "  Rule     -> rule id : if Cond then Action" << endl;
     cout << "  Cond     -> Cond AND Cond | Atom" << endl;
     cout << "  Atom     -> id RelOp value | id" << endl;
@@ -38,25 +29,25 @@ void showGrammarTransformation() {
 
     // ── 2. Problema: recursión izquierda ──
     cout << endl;
-    cout << "2. PROBLEM: LEFT RECURSION" << endl;
+    cout << "2. PROBLEM: LEFT RECURSION" << endl; // Explica el problema
     cout << "----------------------------------------" << endl;
     cout << "  Cond -> Cond AND Cond" << endl;
-    cout << "  'Cond' appears at the start of its own rule." << endl;
+    cout << " 'Cond' appears at the start of its own rule." << endl;
     cout << "  This causes an infinite loop in LL(1) parsers." << endl;
 
     // ── 3. Eliminación de recursión izquierda ──
     cout << endl;
     cout << "3. LEFT RECURSION ELIMINATION" << endl;
     cout << "----------------------------------------" << endl;
-    cout << "  Formula:  A -> A alpha | beta" << endl;
-    cout << "  Becomes:  A  -> beta A'" << endl;
-    cout << "            A' -> alpha A' | epsilon" << endl;
+    cout << "  Formula:  A -> Aα | ß" << endl;
+    cout << "  Becomes:  A  -> ßA'" << endl;
+    cout << "            A' -> αA' | ε" << endl;
     cout << endl;
-    cout << "  Applied:" << endl;
+    cout << "  Applied To Production:" << endl;
     cout << "  Cond -> Cond AND Cond | Atom" << endl;
     cout << "  Becomes:" << endl;
     cout << "  Cond     -> Atom CondRest" << endl;
-    cout << "  CondRest -> AND Atom CondRest | epsilon" << endl;
+    cout << "  CondRest -> AND Atom CondRest | ε" << endl;
 
     // ── 4. Factorización por izquierda ──
     cout << endl;
@@ -64,35 +55,43 @@ void showGrammarTransformation() {
     cout << "----------------------------------------" << endl;
     cout << "  Atom -> id RelOp value | id" << endl;
     cout << "  Both productions start with 'id' -> ambiguous." << endl;
-    cout << "  Solution: use lookahead(1) to decide:" << endl;
-    cout << "    if next token is >, < or = -> Atom -> id RelOp value" << endl;
-    cout << "    if next token is AND or then -> Atom -> id" << endl;
+    cout << "  Solution: " << endl;
+    cout << "  Formula:   A → αβ₁ | αβ₂" << endl;
+    cout << "  Becomes:   A -> αA'" << endl;
+    cout << "             A'-> β₁ | β₂'" << endl;
+    cout << "  Applied To Production:" << endl;
+    cout << "  Atom -> id RelOp value | id" << endl;
+    cout << "  Becomes:" << endl;
+    cout << "  Atom     -> id Atom'" << endl;
+    cout << "  Atom'    -> RelOp value | ε" << endl;
 
     // ── 5. Gramática transformada ──
     cout << endl;
     cout << "5. TRANSFORMED GRAMMAR (LL(1))" << endl;
     cout << "----------------------------------------" << endl;
-    cout << "  Program  -> RuleList" << endl;
-    cout << "  RuleList -> Rule RuleList | epsilon" << endl;
-    cout << "  Rule     -> rule id : if Cond then Action" << endl;
-    cout << "  Cond     -> Atom CondRest" << endl;
-    cout << "  CondRest -> AND Atom CondRest | epsilon" << endl;
-    cout << "  Atom     -> id RelOp value | id  (resolved by lookahead)" << endl;
-    cout << "  RelOp    -> > | < | =" << endl;
-    cout << "  Action   -> id" << endl;
+    cout << "  Program  ->  RuleList" << endl;
+    cout << "  RuleList ->  Rule RuleList | ε" << endl;
+    cout << "  Rule     ->  rule id : if Cond then Action" << endl;
+    cout << "  Cond     ->  Atom CondRest" << endl;
+    cout << "  CondRest ->  AND Atom CondRest | ε" << endl;
+    cout << "  Atom     ->  id Atom' " << endl;
+    cout << "  Atom'    ->  RelOp value | ε" << endl;
+    cout << "  RelOp    ->  > | < | =" << endl;
+    cout << "  Action   ->  id" << endl;
 
     // ── 6. FIRST y FOLLOW ──
     cout << endl;
     cout << "6. FIRST AND FOLLOW SETS" << endl;
-    cout << "----------------------------------------" << endl;
-    cout << "  Non-Terminal  | FIRST               | FOLLOW" << endl;
-    cout << "  --------------|---------------------|------------------" << endl;
-    cout << "  Program       | { rule, eps }        | { $ }" << endl;
-    cout << "  RuleList      | { rule, eps }        | { $ }" << endl;
+    cout << "----------------------------------------------------------" << endl;
+    cout << "  Non-Terminal  |        FIRST         |      FOLLOW" << endl;
+    cout << "  --------------|----------------------|------------------" << endl;
+    cout << "  Program       | { rule, ε }          | { $ }" << endl;
+    cout << "  RuleList      | { rule, ε }          | { $ }" << endl;
     cout << "  Rule          | { rule }             | { rule, $ }" << endl;
     cout << "  Cond          | { id }               | { then }" << endl;
-    cout << "  CondRest      | { AND, eps }         | { then }" << endl;
+    cout << "  CondRest      | { AND, ε }           | { then }" << endl;
     cout << "  Atom          | { id }               | { AND, then }" << endl;
+    cout << "  Atom'         | { >, <, =, ε }       | { AND, then }" << endl;
     cout << "  RelOp         | { >, <, = }          | { value }" << endl;
     cout << "  Action        | { id }               | { rule, $ }" << endl;
 
@@ -109,7 +108,7 @@ void showGrammarTransformation() {
     cout << "  RuleList      | Rule RuleList |               |                   |       |     |     |     | eps" << endl;
     cout << "  Rule          | rule id:if..  |               |                   |       |     |     |     |" << endl;
     cout << "  Cond          |               | Atom CondRest |                   |       |     |     |     |" << endl;
-    cout << "  CondRest      |               |               | AND Atom CondRest | eps   |     |     |     |" << endl;
+    cout << "  CondRest      |               |               | AND Atom CondRest |   ε   |     |     |     |" << endl;
     cout << "  Atom          |               | id (lookahead)|                   |       |     |     |     |" << endl;
     cout << "  RelOp         |               |               |                   |       |  >  |  <  |  =  |" << endl;
     cout << "  Action        |               | id            |                   |       |     |     |     |" << endl;
@@ -120,6 +119,106 @@ void showGrammarTransformation() {
 // FUNCIÓN PRINCIPAL DE PROCESAMIENTO
 // Conecta todos los módulos: lexer → parser → interpreter → analyzer
 // ─────────────────────────────────────────────────────────────────
+
+void showGrammarTool() {
+    cout << endl;
+    cout << "============================================" << endl;
+    cout << "  GRAMMAR TRANSFORMATION TOOL              " << endl;
+    cout << "============================================" << endl;
+    cout << endl;
+    cout << "FORMAT TO WRITE YOUR GRAMMAR:" << endl;
+    cout << "  - Non-terminals : start with UPPERCASE   (Program, Cond)" << endl;
+    cout << "  - Terminals     : start with lowercase   (rule, if, id)" << endl;
+    cout << "                    or symbols             (>, <, =, :)" << endl;
+    cout << "  - Epsilon       : write as               eps" << endl;
+    cout << "  - Productions   : use ->  between sides" << endl;
+    cout << "  - Alternatives  : use |   to separate" << endl;
+    cout << "  - Start symbol  : must be the first line" << endl;
+    cout << endl;
+    cout << "EXAMPLE:" << endl;
+    cout << "  Program -> RuleList" << endl;
+    cout << "  RuleList -> Rule RuleList | eps" << endl;
+    cout << "  Cond -> Cond AND Cond | Atom" << endl;
+    cout << "  Atom -> id RelOp value | id" << endl;
+    cout << "  RelOp -> > | < | =" << endl;
+    cout << endl;
+    cout << "Write your grammar. When done, write --- on a new line:" << endl;
+    cout << "--------------------------------------------" << endl;
+
+    string line;
+    stringstream buffer;
+    while (getline(cin, line)) {
+        if (line == "---") break;
+        buffer << line << "\n";
+    }
+
+    string grammarInput = buffer.str();
+    if (grammarInput.empty()) {
+        cout << "No grammar entered." << endl;
+        return;
+    }
+
+    // 1. Parsear la gramática original
+    Grammar original = parseGrammar(grammarInput);
+
+    cout << endl;
+    cout << "1. ORIGINAL GRAMMAR:" << endl;
+    printGrammar(original);
+
+    // 2. Eliminar recursión izquierda
+    Grammar noLeftRec = eliminateLeftRecursion(original);
+
+    cout << endl;
+    cout << "2. AFTER LEFT RECURSION ELIMINATION:" << endl;
+    printGrammar(noLeftRec);
+
+    // 3. Left Factoring
+    Grammar factored = leftFactoring(noLeftRec);
+
+    cout << endl;
+    cout << "3. AFTER LEFT FACTORING:" << endl;
+    printGrammar(factored);
+
+    // 4. FIRST y FOLLOW
+    auto first  = computeFirst(factored);
+    auto follow = computeFollow(factored, first);
+
+    cout << endl;
+    cout << "4. FIRST AND FOLLOW SETS:" << endl;
+    printFirstFollow(factored, first, follow);
+
+    // 5. Tabla de parsing
+    auto table = buildParsingTable(factored, first, follow);
+
+    cout << endl;
+    cout << "5. PARSING TABLE M[A][a]:" << endl;
+    // Recopilar todos los terminales que aparecen en la tabla
+    set<string> usedTerminals;
+    for (auto& row : table) {
+        for (auto& col : row.second) {
+            usedTerminals.insert(col.first);
+        }
+    }
+
+    cout << "  " << setw(12) << "Non-Terminal";
+    for (auto& t : usedTerminals) cout << " | " << setw(10) << t;
+    cout << endl;
+
+    for (auto& nt : factored.nonTerminals) {
+        cout << "  " << setw(12) << nt;
+        for (auto& t : usedTerminals) {
+            if (table[nt].count(t)) {
+                // Mostrar la producción
+                string prod = nt + "->";
+                for (auto& s : table[nt][t].rhs) prod += s + " ";
+                cout << " | " << setw(10) << prod;
+            } else {
+                cout << " | " << setw(10) << "";
+            }
+        }
+        cout << endl;
+    }
+}
 
 void processAndShow(string input) {
 
@@ -196,6 +295,8 @@ void processAndShow(string input) {
         }
     }
 }
+
+
 
 // ─────────────────────────────────────────────────────────────────
 // MENÚ PRINCIPAL

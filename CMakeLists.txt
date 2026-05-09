@@ -15,4 +15,6 @@ add_executable(Rule_Based_Language_with_Execution_and_Analysis
         interpreter.cpp
         interpreter.h
         Analyzer.cpp
-        Analyzer.h)
+        Analyzer.h
+        Grammar.cpp
+        Grammar.h)

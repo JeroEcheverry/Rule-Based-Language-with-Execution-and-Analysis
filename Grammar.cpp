@@ -1,8 +1,6 @@
 //
 // Created by Sofía Marín Bustamante on 8/05/26.
 //
-#ifndef GRAMMAR_CPP
-#define GRAMMAR_CPP
 
 #include <string>
 #include <vector>
@@ -372,12 +370,14 @@ map<string, set<string>> computeFollow(
 //   Para cada terminal a ∈ FIRST(α) - {ε}: M[A][a] = A → α
 //   Si ε ∈ FIRST(α): para cada b ∈ FOLLOW(A): M[A][b] = A → α
 // ─────────────────────────────────────────────
-map<string, map<string, Production>> buildLL1Table(
+map<string, map<string, Production>> buildParsingTable(
     const Grammar& g,
     map<string, set<string>>& first,
-    map<string, set<string>>& follow)
+    map<string, set<string>>& follow,
+    bool& isLL1)  // ← retorna si es LL(1) o no
 {
     map<string, map<string, Production>> table;
+    isLL1 = true; // asumimos que es LL(1) hasta encontrar conflicto
 
     for (auto& prod : g.productions) {
         string A   = prod.lhs;
@@ -394,19 +394,47 @@ map<string, map<string, Production>> buildLL1Table(
                 for (auto& f : first[Y]) {
                     if (f != "eps") firstRhs.insert(f);
                 }
-                if (!first[Y].count("eps")) { allEps = false; break; }
+                if (!first[Y].count("eps")) {
+                    allEps = false;
+                    break;
+                }
             }
             if (allEps) firstRhs.insert("eps");
         }
 
-        // M[A][a] = prod para a ∈ FIRST(rhs) - {ε}
+        // M[A][a] para a ∈ FIRST(rhs) - {ε}
         for (auto& a : firstRhs) {
-            if (a != "eps") table[A][a] = prod;
+            if (a == "eps") continue;
+
+            if (table[A].count(a)) {
+                // ── CONFLICTO DETECTADO ──────────────────
+                // Hay dos producciones para M[A][a]
+                // Esto viola la condición LL(1)
+                cerr << "[LL(1) Conflict] M[" << A << "]["
+                     << a << "] already has a production:\n";
+                cerr << "  Existing: " << A << " ->";
+                for (auto& s : table[A][a].rhs) cerr << " " << s;
+                cerr << "\n  New:      " << A << " ->";
+                for (auto& s : prod.rhs) cerr << " " << s;
+                cerr << "\n";
+                isLL1 = false;
+            }
+            table[A][a] = prod; // última producción gana
         }
 
         // Si ε ∈ FIRST(rhs) → M[A][b] para b ∈ FOLLOW(A)
         if (firstRhs.count("eps")) {
             for (auto& b : follow[A]) {
+                if (table[A].count(b)) {
+                    cerr << "[LL(1) Conflict] M[" << A << "]["
+                         << b << "] already has a production:\n";
+                    cerr << "  Existing: " << A << " ->";
+                    for (auto& s : table[A][b].rhs) cerr << " " << s;
+                    cerr << "\n  New:      " << A << " ->";
+                    for (auto& s : prod.rhs) cerr << " " << s;
+                    cerr << "\n";
+                    isLL1 = false;
+                }
                 table[A][b] = prod;
             }
         }
@@ -525,5 +553,3 @@ void printParsingTable(
         cout << "\n";
     }
 }
-
-#endif

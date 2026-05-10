@@ -31,10 +31,11 @@ map<string, set<string>> computeFollow(
     const Grammar& g,
     map<string, set<string>>& first);
 
-map<string, map<string, Production>> buildLL1Table(
+map<string, map<string, Production>> buildParsingTable(
     const Grammar& g,
     map<string, set<string>>& first,
-    map<string, set<string>>& follow);
+    map<string, set<string>>& follow,
+    bool& isLL1);
 
 void printGrammar(const Grammar& g);
 

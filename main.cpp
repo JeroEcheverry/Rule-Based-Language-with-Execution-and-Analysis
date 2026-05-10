@@ -102,10 +102,10 @@ void showGrammarTransformation() { // Muestra la transformación de la Gramátic
     cout << "  M[A, a] = production to use when non-terminal is A" << endl;
     cout << "            and current token is a" << endl;
     cout << endl;
-    cout << "  Non-Terminal  | rule          | id            | AND               | then  | >   | <   | =   | $" << endl;
+    cout << "  Non-Terminal  | rule          | id            | AND               | then  |  >  |  <  |  =  |   $" << endl;
     cout << "  --------------|---------------|---------------|-------------------|-------|-----|-----|-----|--------" << endl;
     cout << "  Program       | RuleList      |               |                   |       |     |     |     | RuleList" << endl;
-    cout << "  RuleList      | Rule RuleList |               |                   |       |     |     |     | eps" << endl;
+    cout << "  RuleList      | Rule RuleList |               |                   |       |     |     |     | ε" << endl;
     cout << "  Rule          | rule id:if..  |               |                   |       |     |     |     |" << endl;
     cout << "  Cond          |               | Atom CondRest |                   |       |     |     |     |" << endl;
     cout << "  CondRest      |               |               | AND Atom CondRest |   ε   |     |     |     |" << endl;
@@ -135,12 +135,16 @@ void showGrammarTool() {
     cout << "  - Alternatives  : use |   to separate" << endl;
     cout << "  - Start symbol  : must be the first line" << endl;
     cout << endl;
-    cout << "EXAMPLE:" << endl;
+    cout << "EXAMPLE INPUT:" << endl;
     cout << "  Program -> RuleList" << endl;
     cout << "  RuleList -> Rule RuleList | eps" << endl;
     cout << "  Cond -> Cond AND Cond | Atom" << endl;
     cout << "  Atom -> id RelOp value | id" << endl;
     cout << "  RelOp -> > | < | =" << endl;
+    cout << "EXAMPLE INPUT:" << endl;
+    cout << "  E -> E + T | T" << endl;
+    cout << "  T -> T * F | F" << endl;
+    cout << "  F -> ( E ) | id" << endl;
     cout << endl;
     cout << "Write your grammar. When done, write --- on a new line:" << endl;
     cout << "--------------------------------------------" << endl;
@@ -158,71 +162,77 @@ void showGrammarTool() {
         return;
     }
 
-    // 1. Parsear la gramática original
-    Grammar original = parseGrammar(grammarInput);
+    // ── PASO 1: Gramática original ───────────
+    Grammar original = parseGrammarFromText(grammarInput);
 
-    cout << endl;
-    cout << "1. ORIGINAL GRAMMAR:" << endl;
+    cout << "\n1. ORIGINAL GRAMMAR:" << endl;
     printGrammar(original);
 
-    // 2. Eliminar recursión izquierda
-    Grammar noLeftRec = eliminateLeftRecursion(original);
+    // ── PASO 2: Eliminar recursión izquierda ─
+    // Algoritmo Dragon Book Sección 4.3
+    Grammar noRecursion = eliminateLeftRecursion(original);
 
-    cout << endl;
-    cout << "2. AFTER LEFT RECURSION ELIMINATION:" << endl;
-    printGrammar(noLeftRec);
-
-    // 3. Left Factoring
-    Grammar factored = leftFactoring(noLeftRec);
-
-    cout << endl;
-    cout << "3. AFTER LEFT FACTORING:" << endl;
-    printGrammar(factored);
-
-    // 4. FIRST y FOLLOW
-    auto first  = computeFirst(factored);
-    auto follow = computeFollow(factored, first);
-
-    cout << endl;
-    cout << "4. FIRST AND FOLLOW SETS:" << endl;
-    printFirstFollow(factored, first, follow);
-
-    // 5. Tabla de parsing
-    auto table = buildParsingTable(factored, first, follow);
-
-    cout << endl;
-    cout << "5. PARSING TABLE M[A][a]:" << endl;
-    // Recopilar todos los terminales que aparecen en la tabla
-    set<string> usedTerminals;
-    for (auto& row : table) {
-        for (auto& col : row.second) {
-            usedTerminals.insert(col.first);
+    bool recursionEliminated = false;
+    for (auto& p : original.productions) {
+        if (!p.rhs.empty() && p.rhs[0] == p.lhs) {
+            recursionEliminated = true;
+            break;
         }
     }
 
-    cout << "  " << setw(12) << "Non-Terminal";
-    for (auto& t : usedTerminals) cout << " | " << setw(10) << t;
-    cout << endl;
+    cout << "\n2. AFTER LEFT RECURSION ELIMINATION:" << endl;
+    if (recursionEliminated) {
+        cout << "   (Left recursion was found and eliminated)" << endl;
+    } else {
+        cout << "   (No left recursion found — grammar unchanged)" << endl;
+    }
+    printGrammar(noRecursion);
 
-    for (auto& nt : factored.nonTerminals) {
-        cout << "  " << setw(12) << nt;
-        for (auto& t : usedTerminals) {
-            if (table[nt].count(t)) {
-                // Mostrar la producción
-                string prod = nt + "->";
-                for (auto& s : table[nt][t].rhs) prod += s + " ";
-                cout << " | " << setw(10) << prod;
-            } else {
-                cout << " | " << setw(10) << "";
-            }
-        }
-        cout << endl;
+    // ── PASO 3: Left Factoring ───────────────
+    // Algoritmo Dragon Book Sección 4.3
+    Grammar factored = leftFactoring(noRecursion);
+
+    cout << "\n3. AFTER LEFT FACTORING:" << endl;
+    printGrammar(factored);
+
+    // ── PASO 4: FIRST y FOLLOW ───────────────
+    // Algoritmo Dragon Book Sección 4.4.2
+    auto first  = computeFirst(factored);
+    auto follow = computeFollow(factored, first);
+
+    cout << "\n4. FIRST AND FOLLOW SETS:" << endl;
+    printFirstFollow(factored, first, follow);
+
+    // ── PASO 5: Tabla de parsing ─────────────
+    // Algoritmo Dragon Book Sección 4.4.3
+    // Con detección de conflictos LL(1)
+    bool isLL1 = true;
+    auto table = buildParsingTable(factored, first, follow, isLL1);
+
+    cout << "\n5. PARSING TABLE M[A][a]:" << endl;
+    printParsingTable(factored, table);
+
+    // ── VEREDICTO ────────────────────────────
+    cout << "\n6. LL(1) VERDICT:" << endl;
+    cout << "--------------------------------------------" << endl;
+    if (isLL1) {
+        cout << "  RESULT: Grammar IS LL(1)" << endl;
+        cout << "  No conflicts in the parsing table." << endl;
+        cout << "  The grammar can be parsed by a predictive" << endl;
+        cout << "  parser without backtracking." << endl;
+    } else {
+        cout << "  RESULT: Grammar is NOT LL(1)" << endl;
+        cout << "  Conflicts were found in the parsing table." << endl;
+        cout << "  Possible reasons:" << endl;
+        cout << "    - The grammar is ambiguous" << endl;
+        cout << "    - There is indirect left recursion" << endl;
+        cout << "    - Left factoring was not sufficient" << endl;
+        cout << "  The transformations applied may not be enough" << endl;
+        cout << "  to make this grammar suitable for LL(1) parsing." << endl;
     }
 }
 
 void processAndShow(string input) {
-
-    // ── Análisis léxico ──
     vector<Token> tokens;
     try {
         tokens = tokenize(input);
@@ -231,7 +241,19 @@ void processAndShow(string input) {
         return;
     }
 
-    // ── Análisis sintáctico ──
+    // Validación LL(1) — Algoritmo Figura 4.20
+    Grammar grammar = buildProjectGrammar();
+    auto first      = computeFirst(grammar);
+    auto follow     = computeFollow(grammar, first);
+    bool isLL1      = true;
+    auto table      = buildParsingTable(grammar, first, follow, isLL1);
+
+    cout << "\n[LL(1) Validation]" << endl;
+    bool valid = validateWithLL1(tokens, grammar, table, follow);
+    if (valid) {
+        cout << "[LL(1)] Input accepted." << endl;
+    }
+
     ParseResult parsed;
     try {
         parsed = parse(tokens);
@@ -240,88 +262,72 @@ void processAndShow(string input) {
         return;
     }
 
-    // ── Ejecución ──
+    if (!parsed.program || parsed.program->rules.empty()) {
+        cerr << "Error: no rules found." << endl;
+        return;
+    }
+
     set<string> activatedFacts = interpret(
-        parsed.program,
-        parsed.variables,
-        parsed.facts
-    );
+        parsed.program, parsed.variables, parsed.facts);
 
-    // ── Análisis estático ──
     AnalysisResult analysis = analyze(
-        parsed.program,
-        parsed.variables,
-        parsed.facts
-    );
+        parsed.program, parsed.variables, parsed.facts);
 
-    // ── Output — formato exacto del PDF sección 2.6 ──
     if (activatedFacts.empty()) {
         cout << "(no output)" << endl;
     } else {
-        for (const string& fact : activatedFacts) {
+        for (const string& fact : activatedFacts)
             cout << fact << endl;
-        }
     }
 
-    // ── Análisis estático — mensajes ──
     bool hasAnalysis = !analysis.conflicts.empty()    ||
                        !analysis.redundancies.empty() ||
                        !analysis.inactiveRules.empty();
 
     if (hasAnalysis) {
         cout << "Analysis:" << endl;
-
         for (auto& entry : analysis.conflicts) {
             cout << "Action " << entry.first << " generated by ";
-            vector<string>& rules = entry.second;
-            for (int i = 0; i < (int)rules.size(); i++) {
-                cout << rules[i];
-                if (i < (int)rules.size() - 1) cout << ", ";
+            for (int i = 0; i < (int)entry.second.size(); i++) {
+                cout << entry.second[i];
+                if (i < (int)entry.second.size()-1) cout << ", ";
             }
             cout << endl;
         }
-
         for (auto& group : analysis.redundancies) {
             cout << "Redundant rules: ";
             for (int i = 0; i < (int)group.size(); i++) {
                 cout << group[i];
-                if (i < (int)group.size() - 1) cout << ", ";
+                if (i < (int)group.size()-1) cout << ", ";
             }
             cout << endl;
         }
-
-        for (const string& ruleName : analysis.inactiveRules) {
-            cout << "Potentially inactive rule: " << ruleName << endl;
-        }
+        for (auto& r : analysis.inactiveRules)
+            cout << "Potentially inactive rule: " << r << endl;
     }
 }
 
-
-
-// ─────────────────────────────────────────────────────────────────
-// MENÚ PRINCIPAL
-// ─────────────────────────────────────────────────────────────────
-
+// ── Menú ─────────────────────────────────────
 int main() {
     while (true) {
-        string input;
-        cout << endl;
-        cout << "==========================================" << endl;
+        cout << "\n==========================================" << endl;
         cout << "  Rule-Based Language Interpreter" << endl;
         cout << "==========================================" << endl;
         cout << "  1. Type or paste a program" << endl;
         cout << "  2. Load from a .txt file" << endl;
-        cout << "  3. Show grammar transformation" << endl;
-        cout << "  4. Exit" << endl;
+        cout << "  3. Show project grammar transformation" << endl;
+        cout << "  4. Transform any grammar (LL(1) tool)" << endl;
+        cout << "  5. Exit" << endl;
         cout << "Your choice: ";
 
         int option;
         cin >> option;
         cin.ignore();
 
+        string input;
+
         if (option == 1) {
-            cout << endl;
-            cout << "Write or copy the program." << endl;
+            cout << "\nWrite or copy the program." << endl;
             cout << "When finished, write '---' on a new line." << endl;
             string line;
             stringstream buffer;
@@ -338,7 +344,7 @@ int main() {
             getline(cin, filepath);
             ifstream file(filepath);
             if (!file.is_open()) {
-                cerr << "Error: could not open file '" << filepath << "'" << endl;
+                cerr << "Error: could not open '" << filepath << "'" << endl;
                 continue;
             }
             stringstream buffer;
@@ -348,16 +354,21 @@ int main() {
             processAndShow(input);
 
         } else if (option == 3) {
+            // Muestra la transformación hardcoded del proyecto
+            // con explicación paso a paso
             showGrammarTransformation();
 
         } else if (option == 4) {
+            // Herramienta genérica — el usuario escribe su gramática
+            showGrammarTool();
+
+        } else if (option == 5) {
             cout << "Goodbye!" << endl;
             break;
 
         } else {
-            cerr << "Invalid option. Please choose 1, 2, 3 or 4." << endl;
+            cerr << "Invalid option. Please choose 1-5." << endl;
         }
     }
-
     return 0;
 }

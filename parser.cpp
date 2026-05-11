@@ -415,14 +415,6 @@ ParseResult parse(vector<Token> toks) {
     // ── Paso 4: Validación Figura 4.20 ──────
     bool valid = validateWithLL1(toks, grammar, table, follow);
 
-    if (!valid) {
-        // Hubo errores de sintaxis — los mensajes ya se imprimieron
-        // Intentamos continuar con el AST de todas formas
-        // (comportamiento tolerante — útil para debugging)
-        cerr << "[Parser] Syntax errors found. "
-             << "Attempting to build AST anyway." << endl;
-    }
-
     // ── Paso 5: Construir AST ───────────────
     tokens = toks;
     pos    = 0;

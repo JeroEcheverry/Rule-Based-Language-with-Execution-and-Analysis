@@ -207,7 +207,17 @@ Grammar leftFactoring(const Grammar& g) {
 
     int counter = 1;
 
-    for (auto& A : order) {
+    // Cola de no-terminales a procesar (puede crecer con nuevos A')
+    vector<string> toProcess = order;
+    set<string> processed;
+
+    while (!toProcess.empty()) {
+        string A = toProcess.front();
+        toProcess.erase(toProcess.begin());
+
+        if (processed.count(A)) continue;
+        processed.insert(A);
+
         auto rhsList = prods[A];
         bool changed = true;
 
@@ -225,23 +235,54 @@ Grammar leftFactoring(const Grammar& g) {
 
             for (auto& entry : byFirst) {
                 auto& group = entry.second;
+
                 if (group.size() == 1) {
+                    // Solo una producción con este primer símbolo → no factorizar
                     newRhsList.push_back(group[0]);
                 } else {
-                    // Prefijo común → factorizar
+                    // Múltiples producciones con el mismo primer símbolo
+                    // Encontrar el prefijo común MÁS LARGO
+                    vector<string> prefix = group[0];
+                    for (int k = 1; k < (int)group.size(); k++) {
+                        vector<string> common;
+                        int minLen = min(prefix.size(), group[k].size());
+                        for (int j = 0; j < minLen; j++) {
+                            if (prefix[j] == group[k][j])
+                                common.push_back(prefix[j]);
+                            else
+                                break;
+                        }
+                        prefix = common;
+                    }
+
+                    if (prefix.empty()) {
+                        // No hay prefijo común real → copiar sin cambios
+                        for (auto& rhs : group) newRhsList.push_back(rhs);
+                        continue;
+                    }
+
+                    // Factorizar el prefijo completo
                     changed = true;
                     string Ap = A + "'" + to_string(counter++);
                     result.nonTerminals.insert(Ap);
 
-                    // A → firstSym Ap
-                    newRhsList.push_back({entry.first, Ap});
+                    // A → prefix A'
+                    vector<string> newProd = prefix;
+                    newProd.push_back(Ap);
+                    newRhsList.push_back(newProd);
 
-                    // Ap → resto de cada alternativa
+                    // A' → resto de cada alternativa
+                    vector<vector<string>> apRhsList;
                     for (auto& rhs : group) {
-                        vector<string> rest(rhs.begin()+1, rhs.end());
+                        vector<string> rest(rhs.begin() + prefix.size(), rhs.end());
                         if (rest.empty()) rest = {"eps"};
+                        apRhsList.push_back(rest);
                         result.productions.push_back({Ap, rest});
                     }
+
+                    // Agregar A' a la cola para procesarlo también
+                    prods[Ap] = apRhsList;
+                    toProcess.push_back(Ap);
                 }
             }
             rhsList = newRhsList;

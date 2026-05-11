@@ -271,6 +271,7 @@ void processAndShow(string input) {
         parsed.program, parsed.variables, parsed.facts);
 
     // Output
+    cout << "Output: " << endl;
     if (activatedFacts.empty()) {
         cout << "(no output)" << endl;
     } else {

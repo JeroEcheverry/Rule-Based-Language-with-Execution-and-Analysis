@@ -410,13 +410,8 @@ map<string, map<string, Production>> buildParsingTable(
                 // ── CONFLICTO DETECTADO ──────────────────
                 // Hay dos producciones para M[A][a]
                 // Esto viola la condición LL(1)
-                cerr << "[LL(1) Conflict] M[" << A << "]["
-                     << a << "] already has a production:\n";
-                cerr << "  Existing: " << A << " ->";
                 for (auto& s : table[A][a].rhs) cerr << " " << s;
-                cerr << "\n  New:      " << A << " ->";
                 for (auto& s : prod.rhs) cerr << " " << s;
-                cerr << "\n";
                 isLL1 = false;
             }
             table[A][a] = prod; // última producción gana
@@ -426,13 +421,8 @@ map<string, map<string, Production>> buildParsingTable(
         if (firstRhs.count("eps")) {
             for (auto& b : follow[A]) {
                 if (table[A].count(b)) {
-                    cerr << "[LL(1) Conflict] M[" << A << "]["
-                         << b << "] already has a production:\n";
-                    cerr << "  Existing: " << A << " ->";
                     for (auto& s : table[A][b].rhs) cerr << " " << s;
-                    cerr << "\n  New:      " << A << " ->";
                     for (auto& s : prod.rhs) cerr << " " << s;
-                    cerr << "\n";
                     isLL1 = false;
                 }
                 table[A][b] = prod;

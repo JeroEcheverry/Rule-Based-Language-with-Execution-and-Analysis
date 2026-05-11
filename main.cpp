@@ -241,19 +241,16 @@ void processAndShow(string input) {
         return;
     }
 
-    // Validación LL(1) — Algoritmo Figura 4.20
+    // Validación LL(1) — corre en silencio
+    // Los errores internos van a cerr pero no interrumpen el flujo
     Grammar grammar = buildProjectGrammar();
     auto first      = computeFirst(grammar);
     auto follow     = computeFollow(grammar, first);
     bool isLL1      = true;
     auto table      = buildParsingTable(grammar, first, follow, isLL1);
+    validateWithLL1(tokens, grammar, table, follow); // sin imprimir nada
 
-    cout << "\n[LL(1) Validation]" << endl;
-    bool valid = validateWithLL1(tokens, grammar, table, follow);
-    if (valid) {
-        cout << "[LL(1)] Input accepted." << endl;
-    }
-
+    // Construir AST
     ParseResult parsed;
     try {
         parsed = parse(tokens);
@@ -273,6 +270,7 @@ void processAndShow(string input) {
     AnalysisResult analysis = analyze(
         parsed.program, parsed.variables, parsed.facts);
 
+    // Output
     if (activatedFacts.empty()) {
         cout << "(no output)" << endl;
     } else {

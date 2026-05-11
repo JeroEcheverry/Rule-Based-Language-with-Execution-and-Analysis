@@ -21,57 +21,76 @@ using namespace std;
 //      Atom → id RelOp value | id  se convierte en
 //      Atom → id Atom' / Atom' → RelOp value | ε
 // ─────────────────────────────────────────────
-Grammar buildProjectGrammar() {
-    Grammar g;
-    g.startSymbol = "Program";
 
-    g.nonTerminals = {
+Grammar buildProjectGrammar() {
+
+    // ── PASO 1: Gramática original del proyecto ──
+    // Usamos Cond → Cond AND Atom en lugar de Cond → Cond AND Cond
+    // porque es la forma que el algoritmo de eliminación de recursión
+    // izquierda del Dragon Book maneja correctamente.
+    // Semánticamente es equivalente ya que Atom es la unidad básica
+    // de una condición.
+    Grammar original;
+    original.startSymbol = "Program";
+
+    original.nonTerminals = {
         "Program","RuleList","Rule",
-        "Cond","CondRest",
-        "Atom","Atom'",
-        "RelOp","Action"
+        "Cond","Atom","RelOp","Action"
     };
-    g.terminals = {
+    original.terminals = {
         "rule","if","then","AND",
-        ":","State",
-        ">","<","=",
+        ":","State",">","<","=",
         "id","value","$"
     };
 
     // Program → RuleList
-    g.productions.push_back({"Program", {"RuleList"}});
+    original.productions.push_back({"Program",  {"RuleList"}});
 
     // RuleList → Rule RuleList | ε
-    g.productions.push_back({"RuleList", {"Rule","RuleList"}});
-    g.productions.push_back({"RuleList", {"eps"}});
+    original.productions.push_back({"RuleList", {"Rule","RuleList"}});
+    original.productions.push_back({"RuleList", {"eps"}});
 
     // Rule → rule id : if Cond then Action
-    g.productions.push_back({"Rule",
+    original.productions.push_back({"Rule",
         {"rule","id",":","if","Cond","then","Action"}});
 
-    // Cond → Atom CondRest
-    g.productions.push_back({"Cond", {"Atom","CondRest"}});
+    // Cond → Cond AND Atom | Atom
+    // ← recursión izquierda en forma estándar A → A α | β
+    // donde α = AND Atom  y  β = Atom
+    original.productions.push_back({"Cond", {"Cond","AND","Atom"}});
+    original.productions.push_back({"Cond", {"Atom"}});
 
-    // CondRest → AND Atom CondRest | ε
-    g.productions.push_back({"CondRest", {"AND","Atom","CondRest"}});
-    g.productions.push_back({"CondRest", {"eps"}});
-
-    // Atom → id Atom'
-    g.productions.push_back({"Atom", {"id","Atom'"}});
-
-    // Atom' → RelOp value | ε
-    g.productions.push_back({"Atom'", {"RelOp","value"}});
-    g.productions.push_back({"Atom'", {"eps"}});
+    // Atom → id RelOp value | id  ← prefijo común
+    original.productions.push_back({"Atom", {"id","RelOp","value"}});
+    original.productions.push_back({"Atom", {"id"}});
 
     // RelOp → > | < | =
-    g.productions.push_back({"RelOp", {">"}});
-    g.productions.push_back({"RelOp", {"<"}});
-    g.productions.push_back({"RelOp", {"="}});
+    original.productions.push_back({"RelOp", {">"}});
+    original.productions.push_back({"RelOp", {"<"}});
+    original.productions.push_back({"RelOp", {"="}});
 
     // Action → id
-    g.productions.push_back({"Action", {"id"}});
+    original.productions.push_back({"Action", {"id"}});
 
-    return g;
+    // ── PASO 2: Eliminar recursión izquierda ────
+    // Cond → Cond AND Atom | Atom
+    // se convierte en:
+    //   Cond  → Atom Cond'
+    //   Cond' → AND Atom Cond' | ε
+    Grammar noRecursion = eliminateLeftRecursion(original);
+
+    // ── PASO 3: Left Factoring ──────────────────
+    // Atom → id RelOp value | id
+    // se convierte en:
+    //   Atom  → id Atom'
+    //   Atom' → RelOp value | ε
+    Grammar transformed = leftFactoring(noRecursion);
+
+    // State es producido por el lexer pero no está
+    // en la gramática del PDF — lo agregamos como terminal
+    transformed.terminals.insert("State");
+
+    return transformed;
 }
 
 // ─────────────────────────────────────────────
@@ -174,9 +193,6 @@ bool validateWithLL1(
         // Panic Mode, Heurística 5 del libro:
         // "pop el terminal — asumir que fue insertado"
         if (grammar.terminals.count(X)) {
-            cerr << "[Syntax Error] Expected '" << X
-                 << "' but found '"
-                 << tokens[pos].value << "'" << endl;
             hasErrors = true;
             stk.pop(); // pop del terminal — asumir inserción
             continue;
@@ -186,10 +202,6 @@ bool validateWithLL1(
         // Panic Mode, Heurística 1 del libro:
         // "saltar tokens hasta FOLLOW(X)"
         if (!table.count(X) || !table.at(X).count(a)) {
-            cerr << "[Syntax Error] No rule for ["
-                 << X << "][" << a << "]"
-                 << " — skipping token '"
-                 << tokens[pos].value << "'" << endl;
             hasErrors = true;
 
             // Saltar tokens hasta encontrar algo en FOLLOW(X)

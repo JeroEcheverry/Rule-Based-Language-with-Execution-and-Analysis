@@ -19,9 +19,15 @@ struct Grammar {
     string             startSymbol;
 };
 
+extern bool firstFollowConflict;
+
 Grammar parseGrammarFromText(const string& input);
 
 Grammar eliminateLeftRecursion(const Grammar& g);
+
+void eliminateDirectLeftRecursion(const string& A,
+                                 map<string, vector<vector<string>>>& prods,
+                                 Grammar& res);
 
 Grammar leftFactoring(const Grammar& g);
 

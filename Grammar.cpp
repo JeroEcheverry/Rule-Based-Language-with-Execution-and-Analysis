@@ -8,6 +8,7 @@
 #include <set>
 #include <sstream>
 #include <iostream>
+#include <algorithm>
 #include <iomanip>
 #include "Grammar.h"
 using namespace std;
@@ -119,66 +120,163 @@ Grammar parseGrammarFromText(const string& input) {
 //
 // Funciona para CUALQUIER gramática
 // ─────────────────────────────────────────────
+void eliminateDirectLeftRecursion(const string& A,
+                                 map<string, vector<vector<string>>>& prods,
+                                 Grammar& res) {
+    vector<vector<string>> alphas;
+    vector<vector<string>> betas;
+
+    for (auto& rhs : prods[A]) {
+        if (!rhs.empty() && rhs[0] == A) {
+            alphas.push_back(vector<string>(rhs.begin() + 1, rhs.end()));
+        } else {
+            betas.push_back(rhs);
+        }
+    }
+
+    if (alphas.empty()) {
+        for (auto& rhs : betas) res.productions.push_back({A, rhs});
+    } else {
+        string Ap = A + "'";
+        res.nonTerminals.insert(Ap);
+
+        // A -> beta A'
+        for (auto& beta : betas) {
+            vector<string> newRhs = (beta.size() == 1 && beta[0] == "eps") ? vector<string>{Ap} : beta;
+            if (newRhs.back() != Ap) newRhs.push_back(Ap);
+            res.productions.push_back({A, newRhs});
+        }
+        // A' -> alpha A' | eps
+        for (auto& alpha : alphas) {
+            vector<string> newRhs = alpha;
+            newRhs.push_back(Ap);
+            res.productions.push_back({Ap, newRhs});
+        }
+        res.productions.push_back({Ap, {"eps"}});
+
+        // Actualizar el mapa interno para que el algoritmo generalizado vea los cambios
+        prods[A].clear();
+        prods[Ap] = { {"eps"} }; // Simplificación para el flujo
+    }
+}
+
+// ─────────────────────────────────────────────
+// ELIMINAR RECURSIÓN IZQUIERDA GENERALIZADA
+// Algoritmo Dragon Book 4.3.3 (Cubre indirecta)
+// ─────────────────────────────────────────────
 Grammar eliminateLeftRecursion(const Grammar& g) {
     Grammar result;
     result.startSymbol = g.startSymbol;
     result.terminals   = g.terminals;
+    result.nonTerminals = g.nonTerminals;
 
-    // Mantener orden de aparición de los no-terminales
     vector<string> order;
     map<string, vector<vector<string>>> prods;
+
+    // Preservar orden original de los no-terminales
     for (auto& p : g.productions) {
-        if (!prods.count(p.lhs)) order.push_back(p.lhs);
+        if (find(order.begin(), order.end(), p.lhs) == order.end()) {
+            order.push_back(p.lhs);
+        }
         prods[p.lhs].push_back(p.rhs);
     }
 
-    for (auto& A : order) {
-        vector<vector<string>> alphas; // A → A α → guardamos α
-        vector<vector<string>> betas;  // A → β  (sin recursión)
+    for (int i = 0; i < (int)order.size(); i++) {
+        for (int j = 0; j < i; j++) {
+            string Ai = order[i];
+            string Aj = order[j];
 
-        for (auto& rhs : prods[A]) {
-            if (!rhs.empty() && rhs[0] == A) {
-                // Recursión izquierda: guardar α (todo menos el A inicial)
-                alphas.push_back(vector<string>(rhs.begin()+1, rhs.end()));
-            } else {
-                betas.push_back(rhs);
+            vector<vector<string>> newAiProds;
+            for (auto& rhsAi : prods[Ai]) {
+                if (!rhsAi.empty() && rhsAi[0] == Aj) {
+                    // Reemplazar Ai -> Aj gamma por Ai -> delta1 gamma | delta2 gamma...
+                    vector<string> gamma(rhsAi.begin() + 1, rhsAi.end());
+                    for (auto& rhsAj : prods[Aj]) {
+                        vector<string> combined = rhsAj;
+                        if (combined.size() == 1 && combined[0] == "eps") combined.clear();
+                        combined.insert(combined.end(), gamma.begin(), gamma.end());
+                        if (combined.empty()) combined.push_back("eps");
+                        newAiProds.push_back(combined);
+                    }
+                } else {
+                    newAiProds.push_back(rhsAi);
+                }
             }
+            prods[Ai] = newAiProds;
         }
-
-        result.nonTerminals.insert(A);
-
-        if (alphas.empty()) {
-            // Sin recursión → copiar igual
-            for (auto& rhs : betas) {
-                result.productions.push_back({A, rhs});
-            }
-        } else {
-            // Hay recursión → transformar
-            string Ap = A + "'"; // nuevo no-terminal A'
-            result.nonTerminals.insert(Ap);
-
-            // A → β A'  para cada β
-            for (auto& beta : betas) {
-                vector<string> newRhs = beta;
-                if (newRhs.size()==1 && newRhs[0]=="eps")
-                    newRhs = {Ap};
-                else
-                    newRhs.push_back(Ap);
-                result.productions.push_back({A, newRhs});
-            }
-
-            // A' → α A'  para cada α
-            for (auto& alpha : alphas) {
-                vector<string> newRhs = alpha;
-                newRhs.push_back(Ap);
-                result.productions.push_back({Ap, newRhs});
-            }
-
-            // A' → ε
-            result.productions.push_back({Ap, {"eps"}});
-        }
+        // Al final del ciclo interno, eliminar recursión directa de Ai
+        eliminateDirectLeftRecursion(order[i], prods, result);
     }
     return result;
+}
+
+// ─────────────────────────────────────────────
+// CONSTRUIR TABLA DE PARSING (Sin "rojo" de cerr)
+// ─────────────────────────────────────────────
+bool firstFollowConflict = false;
+
+map<string, map<string, Production>> buildParsingTable(
+    const Grammar& g,
+    map<string, set<string>>& first,
+    map<string, set<string>>& follow,
+    bool& isLL1)
+{
+    map<string, map<string, Production>> table;
+    isLL1 = true;
+    firstFollowConflict = false; // Resetear bandera en cada construcción
+
+    for (auto& prod : g.productions) {
+        string A = prod.lhs;
+        set<string> firstRhs;
+        bool allEps = true;
+
+        // 1. Calcular FIRST(derecha de la producción)
+        if (prod.rhs[0] == "eps") {
+            firstRhs.insert("eps");
+        } else {
+            for (auto& Y : prod.rhs) {
+                // Si Y es terminal, su FIRST es él mismo. Si es NT, usamos el mapa.
+                if (first.count(Y)) {
+                    for (auto& f : first.at(Y)) if (f != "eps") firstRhs.insert(f);
+                    if (!first.at(Y).count("eps")) { allEps = false; break; }
+                } else {
+                    // Es un terminal que no estaba en el mapa (caso raro)
+                    firstRhs.insert(Y);
+                    allEps = false;
+                    break;
+                }
+            }
+            if (allEps) firstRhs.insert("eps");
+        }
+
+        // 2. Regla A: Para cada terminal 'a' en FIRST(rhs), añadir A -> rhs a M[A, a]
+        for (auto& a : firstRhs) {
+            if (a == "eps") continue;
+
+            // Si la casilla ya está ocupada, hay un conflicto
+            if (table[A].count(a)) {
+                isLL1 = false;
+            }
+            table[A][a] = prod;
+        }
+
+        // 3. Regla B: Si 'eps' está en FIRST(rhs), para cada terminal 'b' en FOLLOW(A)
+        if (firstRhs.count("eps")) {
+            for (auto& b : follow.at(A)) {
+
+                // DETECCIÓN DE CONFLICTO FIRST/FOLLOW:
+                // Si intentamos meter la producción por ser anulable (Regla B),
+                // pero esa casilla ya fue llenada por una producción que empieza
+                // con ese mismo terminal (Regla A).
+                if (table[A].count(b)) {
+                    isLL1 = false;
+                    firstFollowConflict = true; // Activamos la razón específica
+                }
+                table[A][b] = prod;
+            }
+        }
+    }
+    return table;
 }
 
 // ─────────────────────────────────────────────
@@ -193,106 +291,76 @@ Grammar eliminateLeftRecursion(const Grammar& g) {
 // Funciona para CUALQUIER gramática
 // ─────────────────────────────────────────────
 Grammar leftFactoring(const Grammar& g) {
-    Grammar result;
-    result.startSymbol  = g.startSymbol;
-    result.terminals    = g.terminals;
-    result.nonTerminals = g.nonTerminals;
-
-    vector<string> order;
-    map<string, vector<vector<string>>> prods;
-    for (auto& p : g.productions) {
-        if (!prods.count(p.lhs)) order.push_back(p.lhs);
-        prods[p.lhs].push_back(p.rhs);
-    }
-
+    Grammar current = g;
+    bool changed = true;
     int counter = 1;
 
-    // Cola de no-terminales a procesar (puede crecer con nuevos A')
-    vector<string> toProcess = order;
-    set<string> processed;
+    while (changed) {
+        changed = false;
+        Grammar next;
+        next.startSymbol = current.startSymbol;
+        next.terminals = current.terminals;
+        next.nonTerminals = current.nonTerminals;
 
-    while (!toProcess.empty()) {
-        string A = toProcess.front();
-        toProcess.erase(toProcess.begin());
+        map<string, vector<vector<string>>> prodsByLhs;
+        for (auto& p : current.productions) prodsByLhs[p.lhs].push_back(p.rhs);
 
-        if (processed.count(A)) continue;
-        processed.insert(A);
+        for (auto& entry : prodsByLhs) {
+            string A = entry.first;
+            vector<vector<string>> alts = entry.second;
 
-        auto rhsList = prods[A];
-        bool changed = true;
+            // 1. Eliminar duplicados exactos
+            sort(alts.begin(), alts.end());
+            alts.erase(unique(alts.begin(), alts.end()), alts.end());
 
-        while (changed) {
-            changed = false;
+            // 2. Buscar el prefijo común más largo entre cualquier par de producciones
+            vector<string> longestPrefix;
+            for (size_t i = 0; i < alts.size(); ++i) {
+                for (size_t j = i + 1; j < alts.size(); ++j) {
+                    if (alts[i][0] == "eps" || alts[j][0] == "eps") continue;
 
-            // Agrupar por primer símbolo
-            map<string, vector<vector<string>>> byFirst;
-            for (auto& rhs : rhsList) {
-                string first = rhs.empty() ? "eps" : rhs[0];
-                byFirst[first].push_back(rhs);
-            }
-
-            vector<vector<string>> newRhsList;
-
-            for (auto& entry : byFirst) {
-                auto& group = entry.second;
-
-                if (group.size() == 1) {
-                    // Solo una producción con este primer símbolo → no factorizar
-                    newRhsList.push_back(group[0]);
-                } else {
-                    // Múltiples producciones con el mismo primer símbolo
-                    // Encontrar el prefijo común MÁS LARGO
-                    vector<string> prefix = group[0];
-                    for (int k = 1; k < (int)group.size(); k++) {
-                        vector<string> common;
-                        int minLen = min(prefix.size(), group[k].size());
-                        for (int j = 0; j < minLen; j++) {
-                            if (prefix[j] == group[k][j])
-                                common.push_back(prefix[j]);
-                            else
-                                break;
-                        }
-                        prefix = common;
+                    vector<string> common;
+                    for (size_t k = 0; k < min(alts[i].size(), alts[j].size()); ++k) {
+                        if (alts[i][k] == alts[j][k]) common.push_back(alts[i][k]);
+                        else break;
                     }
-
-                    if (prefix.empty()) {
-                        // No hay prefijo común real → copiar sin cambios
-                        for (auto& rhs : group) newRhsList.push_back(rhs);
-                        continue;
-                    }
-
-                    // Factorizar el prefijo completo
-                    changed = true;
-                    string Ap = A + "'" + to_string(counter++);
-                    result.nonTerminals.insert(Ap);
-
-                    // A → prefix A'
-                    vector<string> newProd = prefix;
-                    newProd.push_back(Ap);
-                    newRhsList.push_back(newProd);
-
-                    // A' → resto de cada alternativa
-                    vector<vector<string>> apRhsList;
-                    for (auto& rhs : group) {
-                        vector<string> rest(rhs.begin() + prefix.size(), rhs.end());
-                        if (rest.empty()) rest = {"eps"};
-                        apRhsList.push_back(rest);
-                        result.productions.push_back({Ap, rest});
-                    }
-
-                    // Agregar A' a la cola para procesarlo también
-                    prods[Ap] = apRhsList;
-                    toProcess.push_back(Ap);
+                    if (common.size() > longestPrefix.size()) longestPrefix = common;
                 }
             }
-            rhsList = newRhsList;
-        }
 
-        for (auto& rhs : rhsList) {
-            result.productions.push_back({A, rhs});
+            if (!longestPrefix.empty()) {
+                changed = true;
+                string NewNT = A + "p" + to_string(counter++);
+                next.nonTerminals.insert(NewNT);
+
+                // A -> prefix NewNT
+                vector<string> head = longestPrefix;
+                head.push_back(NewNT);
+                next.productions.push_back({A, head});
+
+                // Producciones que no tenían el prefijo se mantienen
+                // Producciones con el prefijo se van al NewNT
+                for (auto& alt : alts) {
+                    bool match = (alt.size() >= longestPrefix.size());
+                    for (size_t k = 0; k < longestPrefix.size() && match; ++k) {
+                        if (alt[k] != longestPrefix[k]) match = false;
+                    }
+
+                    if (match) {
+                        vector<string> rest(alt.begin() + longestPrefix.size(), alt.end());
+                        if (rest.empty()) rest = {"eps"};
+                        next.productions.push_back({NewNT, rest});
+                    } else {
+                        next.productions.push_back({A, alt});
+                    }
+                }
+            } else {
+                for (auto& alt : alts) next.productions.push_back({A, alt});
+            }
         }
+        current = next;
     }
-    return result;
+    return current;
 }
 
 // ─────────────────────────────────────────────
@@ -401,76 +469,6 @@ map<string, set<string>> computeFollow(
         }
     }
     return follow;
-}
-
-// ─────────────────────────────────────────────
-// CONSTRUIR TABLA DE PARSING M[A][a]
-// Algoritmo Dragon Book Sección 4.4.3
-//
-// Para cada producción A → α:
-//   Para cada terminal a ∈ FIRST(α) - {ε}: M[A][a] = A → α
-//   Si ε ∈ FIRST(α): para cada b ∈ FOLLOW(A): M[A][b] = A → α
-// ─────────────────────────────────────────────
-map<string, map<string, Production>> buildParsingTable(
-    const Grammar& g,
-    map<string, set<string>>& first,
-    map<string, set<string>>& follow,
-    bool& isLL1)  // ← retorna si es LL(1) o no
-{
-    map<string, map<string, Production>> table;
-    isLL1 = true; // asumimos que es LL(1) hasta encontrar conflicto
-
-    for (auto& prod : g.productions) {
-        string A   = prod.lhs;
-        auto&  rhs = prod.rhs;
-
-        // Calcular FIRST(rhs)
-        set<string> firstRhs;
-        bool allEps = true;
-
-        if (rhs[0] == "eps") {
-            firstRhs.insert("eps");
-        } else {
-            for (auto& Y : rhs) {
-                for (auto& f : first[Y]) {
-                    if (f != "eps") firstRhs.insert(f);
-                }
-                if (!first[Y].count("eps")) {
-                    allEps = false;
-                    break;
-                }
-            }
-            if (allEps) firstRhs.insert("eps");
-        }
-
-        // M[A][a] para a ∈ FIRST(rhs) - {ε}
-        for (auto& a : firstRhs) {
-            if (a == "eps") continue;
-
-            if (table[A].count(a)) {
-                // ── CONFLICTO DETECTADO ──────────────────
-                // Hay dos producciones para M[A][a]
-                // Esto viola la condición LL(1)
-                for (auto& s : table[A][a].rhs) cerr << " " << s;
-                for (auto& s : prod.rhs) cerr << " " << s;
-                isLL1 = false;
-            }
-            table[A][a] = prod; // última producción gana
-        }
-
-        // Si ε ∈ FIRST(rhs) → M[A][b] para b ∈ FOLLOW(A)
-        if (firstRhs.count("eps")) {
-            for (auto& b : follow[A]) {
-                if (table[A].count(b)) {
-                    for (auto& s : table[A][b].rhs) cerr << " " << s;
-                    for (auto& s : prod.rhs) cerr << " " << s;
-                    isLL1 = false;
-                }
-                table[A][b] = prod;
-            }
-        }
-    }
-    return table;
 }
 
 // ─────────────────────────────────────────────

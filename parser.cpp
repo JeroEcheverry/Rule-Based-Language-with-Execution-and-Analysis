@@ -400,20 +400,26 @@ void parseState(map<string,int>& variables, set<string>& facts) {
 //   5. Si válido → construir AST con descenso recursivo
 // ═══════════════════════════════════════════════════════════════
 ParseResult parse(vector<Token> toks) {
+    // 1. Obtener la gramática original del proyecto
+    Grammar originalGrammar = buildProjectGrammar();
 
-    // ── Paso 1: Gramática LL(1) ─────────────
-    Grammar grammar = buildProjectGrammar();
+    // 2. Aplicar la nueva transformación generalizada
+    // Esto ahora eliminará recursión directa e INDIRECTA automáticamente
+    Grammar ll1Grammar = eliminateLeftRecursion(originalGrammar);
 
-    // ── Paso 2: FIRST y FOLLOW ──────────────
-    auto first  = computeFirst(grammar);
-    auto follow = computeFollow(grammar, first);
+    // 3. Aplicar Factorización por Izquierda (opcional si ya la hiciste manual)
+    ll1Grammar = leftFactoring(ll1Grammar);
 
-    // ── Paso 3: Tabla M[X][a] ───────────────
+    // 4. Calcular FIRST y FOLLOW sobre la gramática YA transformada
+    auto first  = computeFirst(ll1Grammar);
+    auto follow = computeFollow(ll1Grammar, first);
+
+    // 5. Construir la tabla
     bool isLL1 = true;
-    auto table = buildParsingTable(grammar, first, follow, isLL1);
+    auto table = buildParsingTable(ll1Grammar, first, follow, isLL1);
 
-    // ── Paso 4: Validación Figura 4.20 ──────
-    bool valid = validateWithLL1(toks, grammar, table, follow);
+    // 6. Validar
+    bool valid = validateWithLL1(toks, ll1Grammar, table, follow);
 
     // ── Paso 5: Construir AST ───────────────
     tokens = toks;

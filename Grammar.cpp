@@ -166,8 +166,8 @@ void eliminateDirectLeftRecursion(const string& A,
 // ─────────────────────────────────────────────
 Grammar eliminateLeftRecursion(const Grammar& g) {
     Grammar result;
-    result.startSymbol = g.startSymbol;
-    result.terminals   = g.terminals;
+    result.startSymbol  = g.startSymbol;
+    result.terminals    = g.terminals;
     result.nonTerminals = g.nonTerminals;
 
     vector<string> order;
@@ -204,12 +204,21 @@ Grammar eliminateLeftRecursion(const Grammar& g) {
             }
             prods[Ai] = newAiProds;
         }
-        // Al final del ciclo interno, eliminar recursión directa de Ai
+
+        // Eliminar recursion directa de Ai
         eliminateDirectLeftRecursion(order[i], prods, result);
+
+        // Actualizar prods con lo que quedo en result
+        // para que los siguientes no-terminales puedan usarlo
+        prods[order[i]].clear();
+        for (auto& p : result.productions) {
+            if (p.lhs == order[i]) {
+                prods[order[i]].push_back(p.rhs);
+            }
+        }
     }
     return result;
 }
-
 // ─────────────────────────────────────────────
 // CONSTRUIR TABLA DE PARSING (Sin "rojo" de cerr)
 // ─────────────────────────────────────────────
@@ -223,59 +232,71 @@ map<string, map<string, Production>> buildParsingTable(
 {
     map<string, map<string, Production>> table;
     isLL1 = true;
-    firstFollowConflict = false; // Resetear bandera en cada construcción
+    firstFollowConflict = false;
 
+    // PASO 1: Producciones NO-eps primero (Regla A)
     for (auto& prod : g.productions) {
+        if (prod.rhs[0] == "eps") continue;
+
         string A = prod.lhs;
         set<string> firstRhs;
         bool allEps = true;
 
-        // 1. Calcular FIRST(derecha de la producción)
-        if (prod.rhs[0] == "eps") {
-            firstRhs.insert("eps");
-        } else {
-            for (auto& Y : prod.rhs) {
-                // Si Y es terminal, su FIRST es él mismo. Si es NT, usamos el mapa.
-                if (first.count(Y)) {
-                    for (auto& f : first.at(Y)) if (f != "eps") firstRhs.insert(f);
-                    if (!first.at(Y).count("eps")) { allEps = false; break; }
-                } else {
-                    // Es un terminal que no estaba en el mapa (caso raro)
-                    firstRhs.insert(Y);
+        for (auto& Y : prod.rhs) {
+            if (first.count(Y)) {
+                for (auto& f : first.at(Y)) {
+                    if (f != "eps") firstRhs.insert(f);
+                }
+                if (!first.at(Y).count("eps")) {
                     allEps = false;
                     break;
                 }
+            } else {
+                firstRhs.insert(Y);
+                allEps = false;
+                break;
             }
-            if (allEps) firstRhs.insert("eps");
         }
+        if (allEps) firstRhs.insert("eps");
 
-        // 2. Regla A: Para cada terminal 'a' en FIRST(rhs), añadir A -> rhs a M[A, a]
         for (auto& a : firstRhs) {
             if (a == "eps") continue;
-
-            // Si la casilla ya está ocupada, hay un conflicto
             if (table[A].count(a)) {
                 isLL1 = false;
             }
             table[A][a] = prod;
         }
 
-        // 3. Regla B: Si 'eps' está en FIRST(rhs), para cada terminal 'b' en FOLLOW(A)
-        if (firstRhs.count("eps")) {
+        // Si puede derivar eps, llena celdas de FOLLOW vacias
+        if (allEps) {
             for (auto& b : follow.at(A)) {
-
-                // DETECCIÓN DE CONFLICTO FIRST/FOLLOW:
-                // Si intentamos meter la producción por ser anulable (Regla B),
-                // pero esa casilla ya fue llenada por una producción que empieza
-                // con ese mismo terminal (Regla A).
-                if (table[A].count(b)) {
-                    isLL1 = false;
-                    firstFollowConflict = true; // Activamos la razón específica
+                if (!table[A].count(b)) {
+                    table[A][b] = prod;
                 }
+            }
+        }
+    }
+
+    // PASO 2: Producciones eps puras (Regla B)
+    for (auto& prod : g.productions) {
+        if (prod.rhs[0] != "eps") continue;
+
+        string A = prod.lhs;
+
+        for (auto& b : follow.at(A)) {
+            if (table[A].count(b)) {
+                // Solo es conflicto real si la produccion existente tambien es eps
+                if (table[A][b].rhs[0] == "eps") {
+                    isLL1 = false;
+                    firstFollowConflict = true;
+                }
+                // Si la existente es no-eps, tiene prioridad, no es conflicto
+            } else {
                 table[A][b] = prod;
             }
         }
     }
+
     return table;
 }
 
@@ -310,8 +331,14 @@ Grammar leftFactoring(const Grammar& g) {
             vector<vector<string>> alts = entry.second;
 
             // 1. Eliminar duplicados exactos
+            // Eliminar duplicados exactos
             sort(alts.begin(), alts.end());
             alts.erase(unique(alts.begin(), alts.end()), alts.end());
+
+            // Mover eps al final para que no sobreescriba producciones reales
+            stable_partition(alts.begin(), alts.end(), [](const vector<string>& rhs) {
+                return rhs[0] != "eps";
+            });
 
             // 2. Buscar el prefijo común más largo entre cualquier par de producciones
             vector<string> longestPrefix;
@@ -333,29 +360,55 @@ Grammar leftFactoring(const Grammar& g) {
                 string NewNT = A + "p" + to_string(counter++);
                 next.nonTerminals.insert(NewNT);
 
-                // A -> prefix NewNT
+                // A -> prefix NewNT (siempre primero)
                 vector<string> head = longestPrefix;
                 head.push_back(NewNT);
                 next.productions.push_back({A, head});
 
-                // Producciones que no tenían el prefijo se mantienen
-                // Producciones con el prefijo se van al NewNT
+                // Producciones sin prefijo no-eps primero
                 for (auto& alt : alts) {
                     bool match = (alt.size() >= longestPrefix.size());
                     for (size_t k = 0; k < longestPrefix.size() && match; ++k) {
                         if (alt[k] != longestPrefix[k]) match = false;
                     }
+                    if (!match && alt[0] != "eps") {
+                        next.productions.push_back({A, alt});
+                    }
+                }
 
+                // Producciones sin prefijo eps al final
+                for (auto& alt : alts) {
+                    bool match = (alt.size() >= longestPrefix.size());
+                    for (size_t k = 0; k < longestPrefix.size() && match; ++k) {
+                        if (alt[k] != longestPrefix[k]) match = false;
+                    }
+                    if (!match && alt[0] == "eps") {
+                        next.productions.push_back({A, alt});
+                    }
+                }
+
+                // Producciones del nuevo no-terminal
+                for (auto& alt : alts) {
+                    bool match = (alt.size() >= longestPrefix.size());
+                    for (size_t k = 0; k < longestPrefix.size() && match; ++k) {
+                        if (alt[k] != longestPrefix[k]) match = false;
+                    }
                     if (match) {
                         vector<string> rest(alt.begin() + longestPrefix.size(), alt.end());
                         if (rest.empty()) rest = {"eps"};
                         next.productions.push_back({NewNT, rest});
-                    } else {
-                        next.productions.push_back({A, alt});
                     }
                 }
-            } else {
-                for (auto& alt : alts) next.productions.push_back({A, alt});
+                } 
+                
+            else {
+                // Sin prefijo — no-eps primero, eps al final
+                for (auto& alt : alts) {
+                    if (alt[0] != "eps") next.productions.push_back({A, alt});
+                }
+                for (auto& alt : alts) {
+                        if (alt[0] == "eps") next.productions.push_back({A, alt});
+                }
             }
         }
         current = next;

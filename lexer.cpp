@@ -3,74 +3,87 @@
 #include <stdexcept>
 
 // tokenize()
-// Recorre el texto crudo carácter por carácter y agrupa los caracteres en tokens
+// WHAT IT DOES:
+//   Performs lexical analysis on the raw input string.
+//   Reads the text character by character and groups characters
+//   into tokens — the smallest meaningful units of the language.
 
 vector<Token> tokenize(string input) {
-    vector<Token> tokens; // lista de tokens que vamos construyendo
-    int i = 0;            // posición actual en el texto
- 
+    vector<Token> tokens; // list of tokens being built
+    int i = 0;            // current position in the input string
+
     while (i < input.size()) {
- 
-        // Ignora espacios, saltos de línea y tabulaciones
+
+        // Skip whitespace (spaces, newlines, tabs)
+        // Whitespace has no meaning in this language
         if (isspace(input[i])) {
             i++;
             continue;
         }
- 
-        // Letra: puede ser keyword o identificador
+
+        // Letter: could be a keyword or an identifier
         if (isalpha(input[i])) {
             string word = "";
- 
-            // seguir leyendo mientras sea letra, dígito o guion bajo
+
+            // Keep reading while the character is a letter, digit, or underscore
+            // This handles identifiers like: temp, fan_on, r1, humidity_level
             while (i < input.size() && (isalnum(input[i]) || input[i] == '_')) {
                 word += input[i];
                 i++;
             }
- 
-            // verificar si la palabra es un keyword
+
+            // Check if the word is a reserved keyword
+            // Keywords are case-sensitive as defined in the project spec (section 2.3)
             if      (word == "rule") tokens.push_back({TokenType::RULE,  word});
             else if (word == "if")   tokens.push_back({TokenType::IF,    word});
             else if (word == "then") tokens.push_back({TokenType::THEN,  word});
             else if (word == "AND")  tokens.push_back({TokenType::AND,   word});
             else if (word == "State" || word == "state") {
-            // "State" va seguido de ":",es un token especial, que marca el inicio del estado inicial
-                while (i < input.size() && input[i] == ':') i++; // consumir el ":"
+                // "State" marks the beginning of the initial state block.
+                // It is always followed by ":" which we consume here
+                // so the parser does not need to handle it separately.
+                while (i < input.size() && input[i] == ':') i++;
                 tokens.push_back({TokenType::STATE, "State"});
             }
             else {
-                // no es keyword, es un identificador (variable, hecho, nombre de regla)
+                // Not a keyword → it is an identifier
+                // Identifiers represent: variable names, fact names, rule names
                 tokens.push_back({TokenType::ID, word});
             }
- 
+
             continue;
         }
- 
-        // Dígito: es un número entero
+
+        //Digit: integer literal
         if (isdigit(input[i])) {
             string num = "";
- 
-            // seguir leyendo mientras sea dígito
+
+            // Keep reading while the character is a digit
+            // Only base-10 non-negative integers are supported (section 2.3)
             while (i < input.size() && isdigit(input[i])) {
                 num += input[i];
                 i++;
             }
- 
+
             tokens.push_back({TokenType::NUMBER, num});
             continue;
         }
- 
-        // Símbolos de un solo carácter
+
+        //Single-character symbols
+        // Each symbol maps directly to its token type
         if (input[i] == ':') { tokens.push_back({TokenType::COLON, ":"}); i++; continue; }
         if (input[i] == '>') { tokens.push_back({TokenType::GT,    ">"}); i++; continue; }
         if (input[i] == '<') { tokens.push_back({TokenType::LT,    "<"}); i++; continue; }
         if (input[i] == '=') { tokens.push_back({TokenType::EQ,    "="}); i++; continue; }
- 
-        // Carácter desconocido (error de escritura del usuario)
-        throw runtime_error("Caracter no reconocido: " + string(1, input[i]));
+
+        //Unknown character → lexical error
+        // The character is not part of the language alphabet
+        throw runtime_error("Unrecognized character: " + string(1, input[i]));
     }
- 
-    // marcar el fin de la lista de tokens
+
+    // Mark the end of the token list
+    // The parser uses this to know when the input is exhausted
     tokens.push_back({TokenType::END, ""});
- 
+
     return tokens;
 }

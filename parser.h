@@ -9,19 +9,20 @@
 
 using namespace std;
 
-// ParseResult agrupa todo lo que el parser produce
 struct ParseResult {
-    ProgramNode*       program;   // AST con todas las reglas
-    map<string, int>   variables; // temp=35, humidity=40
-    set<string>        facts;     // hechos activos iniciales
+    ProgramNode*     program;   // complete AST with all rules
+    map<string, int> variables; // variable assignments from State block (temp=35)
+    set<string>      facts;     // initially active facts from State block
 };
 
-// Función principal — recibe tokens, retorna AST + estado
+// Main parser function. Receives tokens from the lexer and returns the AST + initial state.
+// Internally: builds grammar → transforms to LL(1) → computes FIRST/FOLLOW →
+//             builds table → validates with Figure 4.20 → builds AST
 ParseResult parse(vector<Token> tokens);
 
-// Función de validación — Algoritmo Figura 4.20 del Dragon Book
-// Retorna true si el input es sintácticamente correcto
-// Imprime errores con Panic Mode (sección 4.4.5)
+// Implements the predictive parsing algorithm from Figure 4.20 of the Dragon Book.
+// Runs silently — prints nothing, only returns true if input is syntactically valid.
+// Uses Panic Mode error recovery (Dragon Book Section 4.4.5).
 bool validateWithLL1(
     vector<Token>& tokens,
     Grammar& grammar,
@@ -29,7 +30,8 @@ bool validateWithLL1(
     map<string, set<string>>& follow
 );
 
-// Construye y retorna la gramática LL(1) del proyecto
+// Builds the project grammar starting from the original form with left recursion,
+// then automatically transforms it to LL(1) using eliminateLeftRecursion() and leftFactoring().
 Grammar buildProjectGrammar();
 
 #endif

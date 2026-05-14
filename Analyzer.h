@@ -10,11 +10,13 @@
 using namespace std;
 
 struct AnalysisResult {
-    map<string, vector<string>> conflicts; // guarda la acción y la lista de reglas que la activan
-    vector<vector<string>> redundancies; // grupos de reglas idénticas
-    vector<string> inactiveRules; // reglas inactivas
+    map<string, vector<string>> conflicts;  // action → list of rules that activate it
+    vector<vector<string>>      redundancies; // groups of identical rules
+    vector<string>              inactiveRules; // rules that can never fire
 };
 
+// Analyzes the AST without executing it.
+// Detects conflicts, redundancies, and potentially inactive rules.
 AnalysisResult analyze(
     ProgramNode* program,
     map<string, int>& variables,

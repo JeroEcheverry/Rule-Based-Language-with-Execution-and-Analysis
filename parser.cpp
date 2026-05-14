@@ -6,33 +6,36 @@
 
 using namespace std;
 
-// ═══════════════════════════════════════════════════════════════
-// SECCIÓN 1 — GRAMÁTICA Y TABLA LL(1)
-// ═══════════════════════════════════════════════════════════════
+//GRAMMAR AND LL(1) TABLE
+// WHAT THIS SECTION DOES:
+//   Builds the project grammar starting from the ORIGINAL form
+//   (with left recursion), then automatically transforms it to
+//   LL(1) using algorithms from the Dragon Book (Section 4.3).
 
-// ─────────────────────────────────────────────
+
 // buildProjectGrammar()
-// Construye la gramática ORIGINAL del proyecto
-// (con recursión izquierda) y la transforma
-// automáticamente a LL(1) usando los algoritmos
-// del Dragon Book.
 //
-// Transformaciones aplicadas:
-//   1. Eliminación de recursión izquierda (Sección 4.3)
-//      Cond → Cond AND Atom | Atom
-//      se convierte en:
-//        Cond  → Atom Cond'
-//        Cond' → AND Atom Cond' | ε
+// Builds the project grammar in three steps:
 //
-//   2. Left Factoring (Sección 4.3)
-//      Atom → id RelOp value | id
-//      se convierte en:
-//        Atom  → id Atom'
-//        Atom' → RelOp value | ε
-// ─────────────────────────────────────────────
+//   Step 1: Define the ORIGINAL grammar (with left recursion)
+//     Cond → Cond AND Atom | Atom   ← left recursion
+//     Atom → id RelOp value | id    ← common prefix
+//
+//   Step 2: Eliminate left recursion (Dragon Book Section 4.3)
+//     Cond → Cond AND Atom | Atom
+//     becomes:
+//       Cond  → Atom Cond'
+//       Cond' → AND Atom Cond' | eps
+//
+//   Step 3: Apply left factoring (Dragon Book Section 4.3)
+//     Atom → id RelOp value | id
+//     becomes:
+//       Atom  → id Atom'
+//       Atom' → RelOp value | eps
+
 Grammar buildProjectGrammar() {
 
-    // Gramática original del proyecto con recursión izquierda
+    // Step 1: Original grammar with left recursion
     Grammar original;
     original.startSymbol = "Program";
 
@@ -49,7 +52,7 @@ Grammar buildProjectGrammar() {
     // Program → RuleList
     original.productions.push_back({"Program",  {"RuleList"}});
 
-    // RuleList → Rule RuleList | ε
+    // RuleList → Rule RuleList | eps
     original.productions.push_back({"RuleList", {"Rule","RuleList"}});
     original.productions.push_back({"RuleList", {"eps"}});
 
@@ -57,12 +60,12 @@ Grammar buildProjectGrammar() {
     original.productions.push_back({"Rule",
         {"rule","id",":","if","Cond","then","Action"}});
 
-    // Cond → Cond AND Atom | Atom  ← recursión izquierda
+    // Cond → Cond AND Atom | Atom  ← LEFT RECURSION
     // A=Cond, alpha=AND Atom, beta=Atom
     original.productions.push_back({"Cond", {"Cond","AND","Atom"}});
     original.productions.push_back({"Cond", {"Atom"}});
 
-    // Atom → id RelOp value | id  ← prefijo común
+    // Atom → id RelOp value | id  ← COMMON PREFIX
     original.productions.push_back({"Atom", {"id","RelOp","value"}});
     original.productions.push_back({"Atom", {"id"}});
 
@@ -74,21 +77,23 @@ Grammar buildProjectGrammar() {
     // Action → id
     original.productions.push_back({"Action", {"id"}});
 
-    // Paso 2: Eliminar recursión izquierda automáticamente
+    // Step 2: Automatically eliminate left recursion
     Grammar noRecursion = eliminateLeftRecursion(original);
 
-    // Paso 3: Left Factoring automático
+    // Step 3: Automatically apply left factoring
     Grammar transformed = leftFactoring(noRecursion);
 
+    // Add State as a terminal so the validator handles it correctly
     transformed.terminals.insert("State");
 
     return transformed;
 }
 
-// ─────────────────────────────────────────────
-// Convierte un token del lexer al string
-// que usa la gramática
-// ─────────────────────────────────────────────
+// tokenToGrammar()
+// Converts a lexer token type to the string symbol used
+// in the grammar. Needed to look up entries in the parsing table
+// M[NonTerminal][terminal].
+
 string tokenToGrammar(const Token& t) {
     switch (t.type) {
         case TokenType::RULE:   return "rule";
@@ -107,24 +112,24 @@ string tokenToGrammar(const Token& t) {
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SECCIÓN 2 — ALGORITMO FIGURA 4.20 + PANIC MODE
-// Implementación del Dragon Book
-// ═══════════════════════════════════════════════════════════════
+//LL(1) VALIDATION (Figure 4.20 + Panic Mode)
+//
+// WHAT THIS SECTION DOES:
+//   Implements the predictive parsing algorithm from Figure 4.20
+//   of the Dragon Book, with Panic Mode error recovery (Section 4.4.5).
 
-// ─────────────────────────────────────────────
 // validateWithLL1()
 //
-// Implementa el algoritmo de la Figura 4.20.
-// Corre en SILENCIO — no imprime nada.
-// Solo retorna true/false para uso interno.
-//
-// Manejo de errores — Sección 4.4.5 Panic Mode:
-//   Heurística 1: si M[X,a] vacío → saltar tokens
-//                 hasta encontrar algo en FOLLOW(X)
-//   Heurística 5: si terminal X no coincide con a
-//                 → pop el terminal (asumir inserción)
-// ─────────────────────────────────────────────
+// Implements Figure 4.20 of the Dragon Book.
+// Runs SILENTLY — prints nothing, only returns true/false.
+// Used internally by parse() to validate syntax.
+
+// PARAMETERS:
+//   tokens  → token list from the lexer
+//   grammar → the LL(1) grammar (already transformed)
+//   table   → predictive parsing table M[NonTerminal][terminal]
+//   follow  → FOLLOW sets for each non-terminal
+
 bool validateWithLL1(
     vector<Token>& tokens,
     Grammar& grammar,
@@ -133,20 +138,22 @@ bool validateWithLL1(
 {
     bool hasErrors = false;
 
+    // Initialize the stack with $ (end marker) and the start symbol
     stack<string> stk;
     stk.push("$");
-    stk.push(grammar.startSymbol);
+    stk.push(grammar.startSymbol); // startSymbol on top
 
     int    pos = 0;
-    string a   = tokenToGrammar(tokens[pos]);
+    string a   = tokenToGrammar(tokens[pos]); // current input symbol
 
     while (stk.top() != "$") {
-        string X = stk.top();
+        string X = stk.top(); // top of stack
 
-        // CASO 1: match
+        // CASE 1: X matches current token → successful match
         if (X == a) {
             stk.pop();
             pos++;
+            // Skip STATE tokens — handled separately by parseState()
             while (pos < (int)tokens.size() &&
                    tokens[pos].type == TokenType::STATE) {
                 pos++;
@@ -155,17 +162,20 @@ bool validateWithLL1(
             continue;
         }
 
-        // Llegamos al bloque State → terminar validacion silenciosamente
+        // Stop silently when we reach the State block
+        // The initial state is parsed separately by parseState()
         if (a == "State" || a == "$") break;
 
-        // CASO 2: terminal que no coincide → Panic Mode heurística 5
+        // CASE 2: X is a terminal that doesn't match → Panic Mode heuristic 5
+        // Assume the terminal was mistakenly inserted → pop it
         if (grammar.terminals.count(X)) {
             hasErrors = true;
             stk.pop();
             continue;
         }
 
-        // CASO 3: M[X][a] vacío → Panic Mode heurística 1
+        // CASE 3: M[X][a] is empty → Panic Mode heuristic 1
+        // Skip tokens until we find a synchronizing token in FOLLOW(X)
         if (!table.count(X) || !table.at(X).count(a)) {
             hasErrors = true;
             while (a != "$" && a != "State" &&
@@ -176,11 +186,13 @@ bool validateWithLL1(
                 else
                     a = "$";
             }
-            stk.pop();
+            stk.pop(); // pop X and continue
             continue;
         }
 
-        // CASO 4: aplicar producción de la tabla
+        // CASE 4: M[X][a] has a production → apply it
+        // Pop X and push the production's RHS in reverse order
+        // (so the leftmost symbol ends up on top of the stack)
         Production prod = table.at(X).at(a);
         stk.pop();
         if (prod.rhs[0] != "eps") {
@@ -188,23 +200,29 @@ bool validateWithLL1(
                 stk.push(prod.rhs[i]);
             }
         }
+        // If production is eps → push nothing (epsilon = empty string)
     }
 
     return !hasErrors;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SECCIÓN 3 — CONSTRUCCIÓN DEL AST (Descenso Recursivo)
-// Guiado por la tabla LL(1) como referencia conceptual
-// ═══════════════════════════════════════════════════════════════
+//AST CONSTRUCTION (Recursive Descent)
+// WHAT THIS SECTION DOES:
+//   Builds the AST using recursive descent parsing.
+//   Each function corresponds to one production rule in the grammar.
+//   Guided conceptually by the same LL(1) table from Section 2.
 
-static vector<Token> tokens;
-static int pos;
 
+static vector<Token> tokens; // token list from the lexer
+static int pos;              // current position in the token list
+
+// Returns the current token without advancing
 Token current() {
     return tokens[pos];
 }
 
+// Verifies the current token matches the expected type and advances.
+// Throws a syntax error if the token does not match.
 Token consume(TokenType expected) {
     if (current().type != expected) {
         throw runtime_error(
@@ -214,6 +232,7 @@ Token consume(TokenType expected) {
     return tokens[pos++];
 }
 
+// Forward declarations — functions call each other recursively
 CondNode* parseAtom();
 CondNode* parseCondRest(CondNode* left);
 CondNode* parseCond();
@@ -221,106 +240,112 @@ RuleNode* parseRule();
 void      parseRuleList(ProgramNode* program);
 void      parseState(map<string,int>& vars, set<string>& facts);
 
-// ─────────────────────────────────────────────
 // parseAtom()
-// Gramática: Atom → id Atom'
-//            Atom' → RelOp value | ε
-//
-// Tabla:
+// Grammar: Atom  → id Atom'
+//          Atom' → RelOp value | eps
+// Table entries used:
 //   M[Atom][id]    = Atom → id Atom'
-//   M[Atom'][>/<==] = Atom' → RelOp value
-//   M[Atom'][AND]  = Atom' → ε
-//   M[Atom'][then] = Atom' → ε
-// ─────────────────────────────────────────────
+//   M[Atom'][>]    = Atom' → RelOp value  → comparison node
+//   M[Atom'][<]    = Atom' → RelOp value  → comparison node
+//   M[Atom'][=]    = Atom' → RelOp value  → comparison node
+//   M[Atom'][AND]  = Atom' → eps          → fact node
+//   M[Atom'][then] = Atom' → eps          → fact node
+
 CondNode* parseAtom() {
     string idName = current().value;
     consume(TokenType::ID);
 
+    // Look at the next token to decide which Atom' production to use
     TokenType next = current().type;
     if (next == TokenType::GT ||
         next == TokenType::LT ||
         next == TokenType::EQ) {
+        // Atom' → RelOp value → build a comparison node
         string op = current().value;
-        pos++;
+        pos++; // consume the operator
         int val = stoi(current().value);
         consume(TokenType::NUMBER);
         return new CmpNode(idName, op, val);
     }
+    // Atom' → eps → build a fact node
     return new FactNode(idName);
 }
 
-// ─────────────────────────────────────────────
 // parseCondRest()
-// Gramática: CondRest → AND Atom CondRest | ε
+// Grammar: CondRest → AND Atom CondRest | eps
 //
-// Tabla:
-//   M[CondRest][AND]  = AND Atom CondRest
-//   M[CondRest][then] = ε
-// ─────────────────────────────────────────────
+// Table entries used:
+//   M[CondRest][AND]  = AND Atom CondRest → more conditions follow
+//   M[CondRest][then] = eps               → no more conditions
+
+
 CondNode* parseCondRest(CondNode* left) {
     if (current().type == TokenType::AND) {
         consume(TokenType::AND);
         CondNode* right = parseAtom();
         AndNode*  node  = new AndNode(left, right);
-        return parseCondRest(node);
+        return parseCondRest(node); // handle possible additional ANDs
     }
-    return left;
+    return left; // eps → return accumulated condition
 }
 
-// ─────────────────────────────────────────────
 // parseCond()
-// Gramática: Cond → Atom CondRest
-//
-// Tabla:
+// Grammar: Cond → Atom CondRest
+// Table entry used:
 //   M[Cond][id] = Atom CondRest
-// ─────────────────────────────────────────────
+
+// Parses the first atom, then delegates to parseCondRest()
+// to handle any AND chains that follow.
+
 CondNode* parseCond() {
-    CondNode* left = parseAtom();
-    return parseCondRest(left);
+    CondNode* left = parseAtom();      // parse first atom
+    return parseCondRest(left);        // handle AND chains
 }
 
-// ─────────────────────────────────────────────
 // parseRule()
-// Gramática: Rule → rule id : if Cond then Action
-//
-// Tabla:
+// Grammar: Rule → rule id : if Cond then Action
+// Table entry used:
 //   M[Rule][rule] = rule id : if Cond then Action
-// ─────────────────────────────────────────────
+
+// Consumes each token in order and builds a RuleNode.
+
 RuleNode* parseRule() {
-    consume(TokenType::RULE);
-    string name = current().value;
-    consume(TokenType::ID);
-    consume(TokenType::COLON);
-    consume(TokenType::IF);
-    CondNode* cond = parseCond();
-    consume(TokenType::THEN);
-    string action = current().value;
-    consume(TokenType::ID);
+    consume(TokenType::RULE);           // consume "rule"
+    string name = current().value;      // save rule name
+    consume(TokenType::ID);             // consume rule name
+    consume(TokenType::COLON);          // consume ":"
+    consume(TokenType::IF);             // consume "if"
+    CondNode* cond = parseCond();       // parse the full condition tree
+    consume(TokenType::THEN);           // consume "then"
+    string action = current().value;    // save action name
+    consume(TokenType::ID);             // consume action name
     return new RuleNode(name, cond, action);
 }
 
-// ─────────────────────────────────────────────
 // parseRuleList()
-// Gramática: RuleList → Rule RuleList | ε
-//
-// Tabla:
-//   M[RuleList][rule]  = Rule RuleList
-//   M[RuleList][$]     = ε
-//   M[RuleList][State] = ε
-// ─────────────────────────────────────────────
+
+// Grammar: RuleList → Rule RuleList | eps
+
+// Table entries used:
+//   M[RuleList][rule]  = Rule RuleList → parse one rule, then recurse
+//   M[RuleList][$]     = eps           → no more rules
+//   M[RuleList][State] = eps           → initial state block follows
+
 void parseRuleList(ProgramNode* program) {
     if (current().type == TokenType::RULE) {
         RuleNode* rule = parseRule();
         program->rules.push_back(rule);
-        parseRuleList(program);
+        parseRuleList(program); // recursively parse remaining rules
     }
-    // STATE o END → ε
+    // STATE or END token → eps production → stop
 }
 
-// ─────────────────────────────────────────────
-// parseState()
-// Lee el bloque State: con variables y hechos
-// ─────────────────────────────────────────────
+// Reads the initial state block that follows the rules:
+//   State:
+//   temp = 35       ← variable assignment
+//   humidity = 40   ← variable assignment
+//   alert           ← active fact (no value)
+
 void parseState(map<string,int>& variables, set<string>& facts) {
     if (current().type != TokenType::STATE) return;
     consume(TokenType::STATE);
@@ -329,41 +354,32 @@ void parseState(map<string,int>& variables, set<string>& facts) {
         string name = current().value;
         consume(TokenType::ID);
         if (current().type == TokenType::EQ) {
+            // Variable assignment: id = integer
             consume(TokenType::EQ);
             int val = stoi(current().value);
             consume(TokenType::NUMBER);
             variables[name] = val;
         } else {
+            // Active fact: just an identifier with no value
             facts.insert(name);
         }
     }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// FUNCIÓN PRINCIPAL parse()
-//
-// Flujo:
-//   1. Construir gramática original
-//   2. Transformar automáticamente a LL(1)
-//      (eliminación de recursión izquierda + left factoring)
-//   3. Calcular FIRST y FOLLOW (Dragon Book 4.4.2)
-//   4. Construir tabla M[X][a] (Dragon Book 4.4.3)
-//   5. Validar con algoritmo Figura 4.20 + Panic Mode 4.4.5
-//   6. Construir AST con descenso recursivo
-// ═══════════════════════════════════════════════════════════════
+
 ParseResult parse(vector<Token> toks) {
 
-    // Pasos 1-4: gramática → transformación → tabla
+    // Steps 1-4: build grammar, transform, compute sets, build table
     Grammar grammar = buildProjectGrammar();
     auto first  = computeFirst(grammar);
     auto follow = computeFollow(grammar, first);
     bool isLL1  = true;
     auto table  = buildParsingTable(grammar, first, follow, isLL1);
 
-    // Paso 5: validar (silencioso)
+    // Step 5: validate syntax silently (no output)
     validateWithLL1(toks, grammar, table, follow);
 
-    // Paso 6: construir AST
+    // Step 6: build AST using recursive descent
     tokens = toks;
     pos    = 0;
 
@@ -372,8 +388,8 @@ ParseResult parse(vector<Token> toks) {
     set<string>      facts;
 
     try {
-        parseRuleList(program);
-        parseState(variables, facts);
+        parseRuleList(program);     // build rule nodes
+        parseState(variables, facts); // read initial state
     } catch (runtime_error& e) {
         throw runtime_error(string(e.what()));
     }

@@ -1,9 +1,6 @@
-//
-// Created by Sofía Marín Bustamante on 3/05/26.
-//
-
 #ifndef RULE_BASED_LANGUAGE_WITH_EXECUTION_AND_ANALYSIS_INTERPRETER_H
 #define RULE_BASED_LANGUAGE_WITH_EXECUTION_AND_ANALYSIS_INTERPRETER_H
+
 #include "ast.h"
 #include <map>
 #include <set>
@@ -11,10 +8,13 @@
 
 using namespace std;
 
-set<string> interpret( // Recibe el AST, las variables y los hechos iniciales
-    ProgramNode* program,
-    map<string, int> variables,
-    set<string> facts // Retorna el conjunto final de hechos activados
+// Executes the program using fixed-point evaluation.
+// Repeatedly applies all rules until no new facts are produced.
+// Returns only the facts activated by rules, not the initial ones.
+set<string> interpret(
+    ProgramNode* program,    // complete AST built by the parser
+    map<string, int> variables, // initial variable assignments (temp=35)
+    set<string> facts           // initially active facts from State block
 );
 
-#endif //RULE_BASED_LANGUAGE_WITH_EXECUTION_AND_ANALYSIS_INTERPRETER_H
+#endif

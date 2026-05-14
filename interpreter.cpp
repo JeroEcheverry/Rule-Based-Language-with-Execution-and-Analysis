@@ -1,58 +1,55 @@
-//
-// Created by Sofía Marín Bustamante on 3/05/26.
-//
 #include "interpreter.h"
 #include <stdexcept>
 
 using namespace std;
 
-//Evaluacion de las condiciones segun el estado actual
 bool evalCond(CondNode* node, map<string, int>& variables, set<string>& facts) {
+    
     if (node->type == CondType::AND) {
-        AndNode* andNode = (AndNode*)node; // cambiamos el "tipo" de nodo de un CondNode a un AndNode
-        return evalCond(andNode->left,  variables, facts) &&
+        AndNode* andNode = (AndNode*)node; // cast from CondNode to AndNode to access left and right
+        return evalCond(andNode->left,  variables, facts) && // both sides must be true
                evalCond(andNode->right, variables, facts);
-    } // AND es verdadero si ambos lados lo son
-    if (node->type == CondType::CMP) { // si es una comparacion
+    }
+    
+    if (node->type == CondType::CMP) {
         CmpNode* cmpNode = (CmpNode*)node;
-        if (variables.count(cmpNode->id) == 0) { // esto devuelve 1 si la variable existe en el estado y 0 si no
-            return false; // variable no definida significa que la condición es falsa
-        }
-        int varValue = variables[cmpNode->id];
+        if (variables.count(cmpNode->id) == 0) return false; // variable not in state → false
+        int varValue = variables[cmpNode->id]; // get the variable's current value
         if (cmpNode->op == ">") return varValue >  cmpNode->value;
         if (cmpNode->op == "<") return varValue <  cmpNode->value;
         if (cmpNode->op == "=") return varValue == cmpNode->value;
-
-        return false; // operador desconocido
+        return false; // unknown operator
     }
+
     if (node->type == CondType::FACT) {
         FactNode* factNode = (FactNode*)node;
-        return facts.count(factNode->id) > 0;
-    } return false; // tipo desconocido
+        return facts.count(factNode->id) > 0; // true if fact is in the active set
+    }
+    
+    return false;
 }
 
 set<string> interpret(ProgramNode* program, map<string, int> variables, set<string> facts) {
-    set<string> activatedFacts = facts; // hechos iniciales que da el usuario
-    bool changed = true; // repetir hasta que no hayan cambios
-    set<string> newFacts; // hechos nuevos, que son los que activa el programa
+    set<string> activatedFacts = facts; // all active facts: initial + newly activated
+    set<string> newFacts;               // only facts activated by rules (used for output)
+    bool changed = true;                // fixed-point loop control
 
     while (changed) {
-        changed = false; // asumimos que no hay cambios
-        for (RuleNode* rule : program->rules) { // evalua todas las reglas
-            bool condResult = evalCond( // evalua si la regla es verdadera segun los hechos actuales
-                rule->condition,
-                variables,
-                activatedFacts  // evaluamos con todos los hechos
-            );
+        changed = false; // assume no changes until a new fact is found
+
+        for (RuleNode* rule : program->rules) {
+            bool condResult = evalCond(rule->condition, variables, activatedFacts); // evaluate rule condition
+
             if (condResult) {
                 string newFact = rule->action;
-                if (activatedFacts.count(newFact) == 0) { // revisa si el hecho ya esta activo
-                    activatedFacts.insert(newFact); // si no esta activo (=0) lo inserta
-                    newFacts.insert(newFact); // para el output
-                    changed = true; // hubo cambio, debe repetir el loop
+                if (activatedFacts.count(newFact) == 0) { // only activate if not already active
+                    activatedFacts.insert(newFact); // add to all active facts for future evaluations
+                    newFacts.insert(newFact);        // add to output set
+                    changed = true;                  // a new fact was found → iterate again
                 }
             }
         }
     }
-    return newFacts; // solo se devuelven los hechos nuevos y no los iniciales
+
+    return newFacts; // return only rule-activated facts, not the initial ones
 }

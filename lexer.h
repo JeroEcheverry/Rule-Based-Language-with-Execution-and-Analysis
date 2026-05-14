@@ -1,38 +1,40 @@
 #ifndef LEXER_H
 #define LEXER_H
- 
+
 #include <string>
 #include <vector>
- 
+
 using namespace std;
 
+// All possible token types in the language alphabet (section 2.2 of the project spec)
 enum class TokenType {
-    // Keywords
+    // Keywords — reserved words that cannot be used as identifiers
     RULE,   // "rule"
     IF,     // "if"
     THEN,   // "then"
-    AND,    // "AND"
-    STATE,  // "State:"
- 
-    // Símbolos
+    AND,    // "AND" — case sensitive
+    STATE,  // "State:" or "state:" — marks the beginning of the initial state block
+
+    // Symbols
     COLON,  // ":"
     GT,     // ">"
     LT,     // "<"
     EQ,     // "="
- 
-    // Datos
-    ID,     // identificador: temp, alert, fan_on, r1...
-    NUMBER, // número entero: 30, 35, 20...
-    END     // Fin de archivo: indica que no hay más tokens
+
+    // Data tokens
+    ID,     // identifier: variable name, fact name, or rule name (e.g. temp, alert, r1)
+    NUMBER, // integer literal (e.g. 30, 35, 0)
+
+    END     // end of input — signals the parser that there are no more tokens
 };
 
-
-// Cada token tiene un tipo y un valor (token de "temp" → {ID, "temp"})
 struct Token {
-    TokenType type;
-    string value;
+    TokenType type;  // what kind of token this is
+    string    value; // the actual text from the input (e.g. "temp", "30", ">")
 };
 
-vector<Token> tokenize(string input); //Recibe el texto crudo completo y devuelve la lista de tokens
- 
+// Reads the raw input string character by character and returns a list of tokens.
+// Throws runtime_error if an unrecognized character is found.
+vector<Token> tokenize(string input);
+
 #endif

@@ -221,7 +221,7 @@ void processAndShow(string input) {
     try {
         tokens = tokenize(input);
     } catch (runtime_error& e) {
-        cerr << "Lexical error: " << e.what() << endl;
+        cout << "Lexical error: " << e.what() << endl;
         return;
     }
 
@@ -238,7 +238,7 @@ void processAndShow(string input) {
     try {
         parsed = parse(tokens);
     } catch (runtime_error& e) {
-        cerr << "Syntax error: " << e.what() << endl;
+        cout << "Syntax error: " << e.what() << endl;
         return;
     }
 
@@ -286,6 +286,10 @@ void processAndShow(string input) {
 }
 
 int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(&cout);
+    cerr.tie(&cout);
+    
     while (true) {
         cout << "\n==========================================" << endl;
         cout << "  Rule-Based Language Interpreter" << endl;

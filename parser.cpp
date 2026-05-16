@@ -210,6 +210,7 @@ void parseRuleList(ProgramNode* program) {
 }
 
 void parseState(map<string,int>& variables, set<string>& facts) {
+    
     if (current().type != TokenType::STATE) return; // no State block → skip
     consume(TokenType::STATE);
 
@@ -231,6 +232,10 @@ void parseState(map<string,int>& variables, set<string>& facts) {
 // MAIN PARSE FUNCTION
 
 ParseResult parse(vector<Token> toks) {
+
+    tokens = toks;
+    pos    = 0;
+    
     Grammar grammar = buildProjectGrammar();        // Step 1-3: build + transform grammar
     auto first  = computeFirst(grammar);            // Step 4: compute FIRST sets
     auto follow = computeFollow(grammar, first);    // Step 4: compute FOLLOW sets
@@ -238,9 +243,6 @@ ParseResult parse(vector<Token> toks) {
     auto table  = buildParsingTable(grammar, first, follow, isLL1); // Step 5: build table
 
     validateWithLL1(toks, grammar, table, follow);  // Step 6: validate silently
-
-    tokens = toks; // Step 7: build AST with recursive descent
-    pos    = 0;
 
     ProgramNode*     program = new ProgramNode();
     map<string, int> variables;
